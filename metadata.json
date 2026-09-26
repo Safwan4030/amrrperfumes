@@ -1,0 +1,6 @@
+{
+  "name": "AMRR Perfumes",
+  "description": "AMRR Perfumes — Luxury 50ml Eau de Parfum with high concentration French botanicals. \"They will remember you before they remember your name.\"",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,97 @@
+{
+  "entities": {
+    "users": {
+      "title": "Users",
+      "description": "User profiles",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["email", "name"]
+    },
+    "orders": {
+      "title": "Orders",
+      "description": "Customer orders",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "items": { "type": "array" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "emailConfirmationSent": { "type": "boolean" },
+        "emailSentTo": { "type": "string" }
+      },
+      "required": ["userId", "items", "totalAmount"]
+    },
+    "messages": {
+      "title": "Messages",
+      "description": "Customer support and feedback inbox messages",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "message": { "type": "string" },
+        "source": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "read": { "type": "boolean" }
+      },
+      "required": ["message", "createdAt"]
+    },
+    "customers": {
+      "title": "Customers",
+      "description": "Customer contacts, emails, phone numbers, and marketing leads",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "source": { "type": "string" },
+        "optedInOffers": { "type": "boolean" },
+        "totalOrders": { "type": "number" },
+        "totalSpent": { "type": "number" },
+        "city": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "lastActiveAt": { "type": "string" }
+      },
+      "required": ["createdAt"]
+    },
+    "site_analytics": {
+      "title": "Site Analytics",
+      "description": "Site visitor counters and traffic analytics",
+      "type": "object",
+      "properties": {
+        "totalVisits": { "type": "number" },
+        "uniqueVisitors": { "type": "number" },
+        "todayVisits": { "type": "number" },
+        "lastVisitDate": { "type": "string" },
+        "lastVisitAt": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/users" },
+      "description": "User account profiles"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/orders" },
+      "description": "Store orders and line items"
+    },
+    "/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/messages" },
+      "description": "Customer contact messages and atelier feedback"
+    },
+    "/customers/{customerId}": {
+      "schema": { "$ref": "#/entities/customers" },
+      "description": "Customer directory, leads and contact data"
+    },
+    "/site_analytics/{docId}": {
+      "schema": { "$ref": "#/entities/site_analytics" },
+      "description": "Aggregated site visitor counters"
+    }
+  }
+}

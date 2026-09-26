@@ -1,0 +1,72 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all unspecified collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'safwaanvv@gmail.com' ||
+        request.auth.token.email == 'amrrparfumes@gmail.com' ||
+        request.auth.token.email == 'amrrperfumes@gmail.com'
+      );
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // User profiles: strictly accessible by the user themselves or store administrators
+    match /users/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // Orders:
+    // - create: allowed for customers placing orders
+    // - get: allowed for looking up specific order (tracking / order success)
+    // - list: strictly restricted to store administrators or authenticated user querying their own orders
+    // - update, delete: store administrators only (e.g. status changes, cancellations)
+    match /orders/{orderId} {
+      allow create: if true;
+      allow get: if true;
+      allow list: if isAdmin() || (
+        isSignedIn() && (
+          resource.data.userId == request.auth.uid ||
+          (resource.data.shippingDetails.email != null && resource.data.shippingDetails.email == request.auth.token.email)
+        )
+      );
+      allow update, delete: if isAdmin();
+    }
+
+    // Messages / Support Inbox:
+    // - create: anyone can submit contact inquiries & feedback
+    // - read, update, delete: restricted to store administrators only
+    match /messages/{messageId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Customers / CRM leads:
+    // - create, update: customer registrations and checkout lead capture
+    // - read, delete: strictly store administrators (protecting customer PII)
+    match /customers/{customerId} {
+      allow create, update: if true;
+      allow read, delete: if isAdmin();
+    }
+
+    // Site Analytics:
+    // - read, create, update: site visitor metrics tracking
+    // - delete: store administrators only
+    match /site_analytics/{docId} {
+      allow read, create, update: if true;
+      allow delete: if isAdmin();
+    }
+  }
+}
