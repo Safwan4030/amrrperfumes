@@ -23,9 +23,14 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // User profiles: strictly accessible by the user themselves or store administrators
+    // User profiles:
+    // - create, update: customers saving or updating their profile upon sign-in/order
+    // - read: strictly restricted to the user themselves or store administrators
+    // - delete: store administrators only
     match /users/{userId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow create, update: if true;
+      allow read: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
     }
 
     // Orders:

@@ -655,42 +655,25 @@ export async function saveCustomerLead(lead: Partial<CustomerLead> & { email?: s
   // Update Firestore
   try {
     const custRef = doc(db, 'customers', leadId);
-    const snap = await getDoc(custRef);
-    if (snap.exists()) {
-      const prev = snap.data();
-      await updateDoc(custRef, {
-        name: lead.name?.trim() || prev.name || 'Customer',
-        email: emailNorm || prev.email || '',
-        phone: phoneClean || prev.phone || '',
-        source: lead.source || prev.source || 'order_checkout',
-        optedInOffers: lead.optedInOffers !== undefined ? lead.optedInOffers : (prev.optedInOffers ?? true),
-        totalOrders: (prev.totalOrders || 0) + (lead.totalOrders || 0),
-        totalSpent: (prev.totalSpent || 0) + (lead.totalSpent || 0),
-        city: lead.city || prev.city || '',
-        state: lead.state || prev.state || '',
-        pincode: lead.pincode || prev.pincode || '',
-        notes: lead.notes || prev.notes || '',
-        lastActiveAt: nowIso
-      });
-    } else {
-      await setDoc(custRef, {
-        id: leadId,
-        name: lead.name?.trim() || 'Customer',
-        email: emailNorm || '',
-        phone: phoneClean || '',
-        source: lead.source || 'order_checkout',
-        optedInOffers: lead.optedInOffers !== undefined ? lead.optedInOffers : true,
-        totalOrders: lead.totalOrders || 0,
-        totalSpent: lead.totalSpent || 0,
-        city: lead.city || '',
-        state: lead.state || '',
-        pincode: lead.pincode || '',
-        notes: lead.notes || '',
-        tags: lead.tags || ['VIP', 'Offers'],
-        createdAt: nowIso,
-        lastActiveAt: nowIso
-      });
-    }
+    const updateData: Record<string, any> = {
+      id: leadId,
+      name: lead.name?.trim() || 'Customer',
+      email: emailNorm || '',
+      phone: phoneClean || '',
+      source: lead.source || 'order_checkout',
+      optedInOffers: lead.optedInOffers !== undefined ? lead.optedInOffers : true,
+      lastActiveAt: nowIso
+    };
+
+    if (lead.city) updateData.city = lead.city;
+    if (lead.state) updateData.state = lead.state;
+    if (lead.pincode) updateData.pincode = lead.pincode;
+    if (lead.notes) updateData.notes = lead.notes;
+    if (lead.tags) updateData.tags = lead.tags;
+    if (lead.totalOrders) updateData.totalOrders = increment(lead.totalOrders);
+    if (lead.totalSpent) updateData.totalSpent = increment(lead.totalSpent);
+
+    await setDoc(custRef, updateData, { merge: true });
   } catch (err) {
     console.error('Error saving customer lead to Firestore:', err);
   }
