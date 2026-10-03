@@ -75,13 +75,6 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
   const ADMIN_EMAILS = ['amrrperfumes@gmail.com', 'amrrparfumes@gmail.com', 'safwaanvv@gmail.com'];
   const isAdminUser = Boolean(currentUser?.email && ADMIN_EMAILS.includes(currentUser.email.trim().toLowerCase()));
 
-  const isCustomDomain = typeof window !== 'undefined' && 
-    window.location.hostname !== 'localhost' && 
-    window.location.hostname !== '127.0.0.1' && 
-    !window.location.hostname.includes('.run.app') &&
-    !window.location.hostname.includes('.web.app') &&
-    !window.location.hostname.includes('.firebaseapp.com');
-
   const [activeTab, setActiveTab] = useState<'orders' | 'track' | 'wishlist' | 'address'>('orders');
   const [trackQuery, setTrackQuery] = useState('');
   const [searchedOrder, setSearchedOrder] = useState<Order | null>(null);
@@ -132,6 +125,16 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
     return () => clearInterval(timer);
   }, [resendCooldown]);
 
+  // Whenever modal opens or user logs out, ensure view is set to the initial email login page (not OTP)
+  useEffect(() => {
+    if (!currentUser) {
+      setLoginStep('email');
+      setEnteredCode(['', '', '', '']);
+      setLoginError(null);
+      setVerificationCode('');
+    }
+  }, [currentUser, isOpen]);
+
   useEffect(() => {
     if (loginStep === 'verify') {
       setTimeout(() => {
@@ -139,6 +142,18 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
       }, 150);
     }
   }, [loginStep]);
+
+  const handleSignOutClick = () => {
+    setLoginStep('email');
+    setEnteredCode(['', '', '', '']);
+    setLoginEmail('');
+    setLoginName('');
+    setLoginPhone('');
+    setLoginError(null);
+    setVerificationCode('');
+    setDeliveryInfo(null);
+    onLogout();
+  };
 
   if (!isOpen) return null;
 
@@ -497,10 +512,14 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
         optedInOffers: true,
         notes: cleanPhone ? 'Customer logged in with email & phone' : 'Customer logged in with email'
       });
+      setLoginStep('email');
+      setEnteredCode(['', '', '', '']);
       onLogin(userData);
       setIsLoggingIn(false);
     } catch (err: any) {
       console.warn('Profile save note:', err);
+      setLoginStep('email');
+      setEnteredCode(['', '', '', '']);
       onLogin(userData);
       setIsLoggingIn(false);
     }
@@ -531,6 +550,8 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
           optedInOffers: true,
           notes: 'Signed in via Google Account'
         });
+        setLoginStep('email');
+        setEnteredCode(['', '', '', '']);
         onLogin(userData);
       }
     } catch (err: any) {
@@ -545,7 +566,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
       }
       console.warn('Google Sign-In note:', err);
       if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
-        setLoginError('Google Sign-In is unavailable on this domain. Please enter your email address above to receive an instant 4-digit verification code.');
+        setLoginError('Domain not authorized for Google Sign-In yet. Please add this domain to Firebase Console → Authentication → Settings → Authorized domains.');
       } else {
         setLoginError(err.message || 'Google sign-in was cancelled or unavailable.');
       }
@@ -838,7 +859,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
                     </button>
                   )}
                   <button
-                    onClick={onLogout}
+                    onClick={handleSignOutClick}
                     className="text-xs text-gray-600 hover:text-black border border-gray-300 rounded-xl px-3 py-2 flex items-center gap-1.5 hover:bg-gray-50 transition-colors cursor-pointer font-medium"
                     title="Sign Out / Switch Email"
                   >

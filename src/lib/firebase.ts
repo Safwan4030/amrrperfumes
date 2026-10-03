@@ -25,7 +25,16 @@ import {
   deleteDoc,
   increment
 } from 'firebase/firestore';
-import { CustomerInboxMessage, CustomerLead, SiteVisitorStats, Order } from '../types';
+import { 
+  CustomerInboxMessage, 
+  CustomerLead, 
+  SiteVisitorStats, 
+  Order,
+  FinancialAccount,
+  AccountingTransaction,
+  ExpenseItem,
+  AccountTransfer 
+} from '../types';
 
 // Import Firebase config auto-generated during setup
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -50,6 +59,28 @@ export async function saveOrderToFirestore(order: any) {
       updatedAt: new Date().toISOString()
     }, { merge: true });
     console.log('Order successfully stored in Firestore:', order.id);
+
+    // Automatically store and preserve customer contact & order history in CRM
+    if (order.shippingDetails?.email || order.shippingDetails?.phone) {
+      await saveCustomerLead({
+        name: order.shippingDetails.fullName || 'Valued Patron',
+        email: order.shippingDetails.email || '',
+        phone: order.shippingDetails.phone || '',
+        city: order.shippingDetails.city || '',
+        state: order.shippingDetails.state || '',
+        pincode: order.shippingDetails.pincode || '',
+        source: 'order_checkout',
+        totalOrders: 1,
+        totalSpent: order.totalAmount || 0,
+        optedInOffers: true,
+        notes: `Order #${order.id} - ${(order.items || []).map((i: any) => i.product?.name).filter(Boolean).join(', ')}`
+      });
+    }
+
+    // Automatically record verified order sale in Accounting system
+    if (order.status !== 'Cancelled' && order.totalAmount > 0) {
+      await recordOrderSaleInAccounting(order);
+    }
   } catch (err) {
     console.error('Error saving order to Firestore:', err);
   }
@@ -724,25 +755,9 @@ export function subscribeToCustomerLeads(callback: (leads: CustomerLead[]) => vo
   }
 }
 
-// Delete customer lead
+// Customer CRM leads are permanent records and protected from deletion
 export async function deleteCustomerLeadFromFirestore(id: string): Promise<void> {
-  try {
-    const raw = localStorage.getItem('amrr_customer_leads');
-    if (raw) {
-      const list: CustomerLead[] = JSON.parse(raw);
-      const updated = list.filter(c => c.id !== id);
-      localStorage.setItem('amrr_customer_leads', JSON.stringify(updated));
-    }
-  } catch {
-    // ignore
-  }
-
-  try {
-    const custRef = doc(db, 'customers', id);
-    await deleteDoc(custRef);
-  } catch (err) {
-    console.error('Error deleting customer lead:', err);
-  }
+  console.log('Customer CRM records are permanently preserved and protected from deletion. Target ID:', id);
 }
 
 // Automatically sync orders into customer leads so past buyers are captured
@@ -767,3 +782,543 @@ export async function syncExistingOrdersToCustomerLeads(orders: Order[]): Promis
     }
   }
 }
+
+// ==========================================
+// 3. ACCOUNTS & ACCOUNTING SYSTEM (LEDGER, EXPENSES, WALLETS)
+// ==========================================
+
+export const DEFAULT_FINANCIAL_ACCOUNTS: FinancialAccount[] = [
+  {
+    id: 'acc_razorpay',
+    name: 'Razorpay Gateway',
+    type: 'razorpay',
+    openingBalance: 0,
+    currentBalance: 0,
+    totalMoneyIn: 0,
+    totalMoneyOut: 0,
+    notes: 'Online orders payment gateway settlement account',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'acc_bank',
+    name: 'Primary Bank Account (HDFC/ICICI)',
+    type: 'bank',
+    openingBalance: 0,
+    currentBalance: 0,
+    totalMoneyIn: 0,
+    totalMoneyOut: 0,
+    bankName: 'HDFC Bank',
+    notes: 'Main business operational checking account',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'acc_cash',
+    name: 'Cash in Hand (Store/Atelier)',
+    type: 'cash',
+    openingBalance: 0,
+    currentBalance: 0,
+    totalMoneyIn: 0,
+    totalMoneyOut: 0,
+    notes: 'Physical cash on delivery & counter register',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'acc_upi',
+    name: 'Direct UPI Merchant',
+    type: 'upi',
+    openingBalance: 0,
+    currentBalance: 0,
+    totalMoneyIn: 0,
+    totalMoneyOut: 0,
+    notes: 'Direct QR code and VPA merchant payments',
+    createdAt: new Date().toISOString()
+  }
+];
+
+// Subscribe to Financial Accounts / Wallets
+export function subscribeToFinancialAccounts(callback: (accounts: FinancialAccount[]) => void) {
+  try {
+    const accCol = collection(db, 'financial_accounts');
+    return onSnapshot(accCol, (snapshot) => {
+      const accounts: FinancialAccount[] = [];
+      snapshot.forEach((docSnap) => {
+        accounts.push({ id: docSnap.id, ...docSnap.data() } as FinancialAccount);
+      });
+
+      if (accounts.length === 0) {
+        // Fallback to default accounts
+        const raw = localStorage.getItem('amrr_financial_accounts');
+        const list = raw ? JSON.parse(raw) : DEFAULT_FINANCIAL_ACCOUNTS;
+        callback(list);
+      } else {
+        try {
+          localStorage.setItem('amrr_financial_accounts', JSON.stringify(accounts));
+        } catch {
+          // ignore
+        }
+        callback(accounts);
+      }
+    }, (err) => {
+      console.warn('Financial accounts subscription warning:', err);
+      const raw = localStorage.getItem('amrr_financial_accounts');
+      callback(raw ? JSON.parse(raw) : DEFAULT_FINANCIAL_ACCOUNTS);
+    });
+  } catch (err) {
+    console.error('Error in subscribeToFinancialAccounts:', err);
+    const raw = localStorage.getItem('amrr_financial_accounts');
+    callback(raw ? JSON.parse(raw) : DEFAULT_FINANCIAL_ACCOUNTS);
+    return () => {};
+  }
+}
+
+// Save or Update a Financial Account
+export async function saveFinancialAccount(account: FinancialAccount): Promise<void> {
+  try {
+    const raw = localStorage.getItem('amrr_financial_accounts');
+    const list: FinancialAccount[] = raw ? JSON.parse(raw) : [...DEFAULT_FINANCIAL_ACCOUNTS];
+    const idx = list.findIndex(a => a.id === account.id);
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], ...account, updatedAt: new Date().toISOString() };
+    } else {
+      list.push(account);
+    }
+    localStorage.setItem('amrr_financial_accounts', JSON.stringify(list));
+  } catch {
+    // ignore
+  }
+
+  try {
+    const docRef = doc(db, 'financial_accounts', account.id);
+    await setDoc(docRef, {
+      ...account,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    console.error('Error saving financial account to Firestore:', err);
+  }
+}
+
+// Subscribe to Master Accounting Transactions
+export function subscribeToAccountingTransactions(callback: (txs: AccountingTransaction[]) => void) {
+  try {
+    const txCol = collection(db, 'accounting_transactions');
+    return onSnapshot(txCol, (snapshot) => {
+      const txs: AccountingTransaction[] = [];
+      snapshot.forEach((docSnap) => {
+        txs.push({ id: docSnap.id, ...docSnap.data() } as AccountingTransaction);
+      });
+
+      // Sort newest date first
+      txs.sort((a, b) => new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime());
+
+      try {
+        localStorage.setItem('amrr_accounting_transactions', JSON.stringify(txs));
+      } catch {
+        // ignore
+      }
+      callback(txs);
+    }, (err) => {
+      console.warn('Accounting transactions subscription warning:', err);
+      const raw = localStorage.getItem('amrr_accounting_transactions');
+      callback(raw ? JSON.parse(raw) : []);
+    });
+  } catch (err) {
+    console.error('Error in subscribeToAccountingTransactions:', err);
+    const raw = localStorage.getItem('amrr_accounting_transactions');
+    callback(raw ? JSON.parse(raw) : []);
+    return () => {};
+  }
+}
+
+// Save a master accounting transaction (with idempotency guard)
+export async function saveAccountingTransaction(tx: AccountingTransaction): Promise<void> {
+  try {
+    const raw = localStorage.getItem('amrr_accounting_transactions');
+    const list: AccountingTransaction[] = raw ? JSON.parse(raw) : [];
+    const idx = list.findIndex(t => t.id === tx.id);
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], ...tx, updatedAt: new Date().toISOString() };
+    } else {
+      list.unshift(tx);
+    }
+    localStorage.setItem('amrr_accounting_transactions', JSON.stringify(list));
+  } catch {
+    // ignore
+  }
+
+  try {
+    const docRef = doc(db, 'accounting_transactions', tx.id);
+    await setDoc(docRef, {
+      ...tx,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    console.error('Error saving accounting transaction to Firestore:', err);
+  }
+}
+
+// Delete an accounting transaction (for manual adjustments)
+export async function deleteAccountingTransaction(id: string): Promise<void> {
+  try {
+    const raw = localStorage.getItem('amrr_accounting_transactions');
+    if (raw) {
+      const list: AccountingTransaction[] = JSON.parse(raw);
+      localStorage.setItem('amrr_accounting_transactions', JSON.stringify(list.filter(t => t.id !== id)));
+    }
+  } catch {
+    // ignore
+  }
+
+  try {
+    await deleteDoc(doc(db, 'accounting_transactions', id));
+  } catch (err) {
+    console.error('Error deleting accounting transaction from Firestore:', err);
+  }
+}
+
+// Subscribe to Operating Expenses
+export function subscribeToExpenses(callback: (expenses: ExpenseItem[]) => void) {
+  try {
+    const expCol = collection(db, 'expenses');
+    return onSnapshot(expCol, (snapshot) => {
+      const expenses: ExpenseItem[] = [];
+      snapshot.forEach((docSnap) => {
+        expenses.push({ id: docSnap.id, ...docSnap.data() } as ExpenseItem);
+      });
+
+      expenses.sort((a, b) => new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime());
+
+      try {
+        localStorage.setItem('amrr_expenses', JSON.stringify(expenses));
+      } catch {
+        // ignore
+      }
+      callback(expenses);
+    }, (err) => {
+      console.warn('Expenses subscription warning:', err);
+      const raw = localStorage.getItem('amrr_expenses');
+      callback(raw ? JSON.parse(raw) : []);
+    });
+  } catch (err) {
+    console.error('Error in subscribeToExpenses:', err);
+    const raw = localStorage.getItem('amrr_expenses');
+    callback(raw ? JSON.parse(raw) : []);
+    return () => {};
+  }
+}
+
+// Save an Expense & automatically post to master transaction ledger
+export async function saveExpense(expense: ExpenseItem): Promise<void> {
+  try {
+    const raw = localStorage.getItem('amrr_expenses');
+    const list: ExpenseItem[] = raw ? JSON.parse(raw) : [];
+    const idx = list.findIndex(e => e.id === expense.id);
+    if (idx >= 0) {
+      list[idx] = expense;
+    } else {
+      list.unshift(expense);
+    }
+    localStorage.setItem('amrr_expenses', JSON.stringify(list));
+  } catch {
+    // ignore
+  }
+
+  try {
+    await setDoc(doc(db, 'expenses', expense.id), expense, { merge: true });
+
+    // Link directly to master accounting transactions ledger
+    const txId = 'tx_exp_' + expense.id;
+    await saveAccountingTransaction({
+      id: txId,
+      date: expense.date,
+      type: 'expense',
+      amount: expense.amount,
+      description: expense.description,
+      category: expense.category,
+      accountId: expense.accountId || 'acc_bank',
+      accountName: expense.accountName || 'Primary Bank Account',
+      vendorName: expense.supplier,
+      paymentMethod: expense.paymentMethod || 'Bank Transfer',
+      paymentStatus: 'Completed',
+      referenceNumber: expense.referenceNumber || '',
+      notes: expense.notes || '',
+      createdAt: expense.createdAt
+    });
+
+    // Update account balance (Money Out)
+    const targetAccountId = expense.accountId || 'acc_bank';
+    const accRef = doc(db, 'financial_accounts', targetAccountId);
+    await setDoc(accRef, {
+      id: targetAccountId,
+      totalMoneyOut: increment(expense.amount),
+      currentBalance: increment(-expense.amount),
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    console.error('Error saving expense to Firestore:', err);
+  }
+}
+
+// Delete an Expense & remove from transaction ledger
+export async function deleteExpense(expenseId: string, amount?: number, accountId?: string): Promise<void> {
+  try {
+    const raw = localStorage.getItem('amrr_expenses');
+    if (raw) {
+      const list: ExpenseItem[] = JSON.parse(raw);
+      localStorage.setItem('amrr_expenses', JSON.stringify(list.filter(e => e.id !== expenseId)));
+    }
+  } catch {
+    // ignore
+  }
+
+  try {
+    await deleteDoc(doc(db, 'expenses', expenseId));
+    await deleteAccountingTransaction('tx_exp_' + expenseId);
+
+    // Revert account balance if amount provided
+    if (amount && accountId) {
+      const accRef = doc(db, 'financial_accounts', accountId);
+      await setDoc(accRef, {
+        id: accountId,
+        totalMoneyOut: increment(-amount),
+        currentBalance: increment(amount),
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    }
+  } catch (err) {
+    console.error('Error deleting expense from Firestore:', err);
+  }
+}
+
+// Subscribe to Account Transfers
+export function subscribeToTransfers(callback: (transfers: AccountTransfer[]) => void) {
+  try {
+    const trfCol = collection(db, 'transfers');
+    return onSnapshot(trfCol, (snapshot) => {
+      const transfers: AccountTransfer[] = [];
+      snapshot.forEach((docSnap) => {
+        transfers.push({ id: docSnap.id, ...docSnap.data() } as AccountTransfer);
+      });
+
+      transfers.sort((a, b) => new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime());
+
+      try {
+        localStorage.setItem('amrr_transfers', JSON.stringify(transfers));
+      } catch {
+        // ignore
+      }
+      callback(transfers);
+    }, (err) => {
+      console.warn('Transfers subscription warning:', err);
+      const raw = localStorage.getItem('amrr_transfers');
+      callback(raw ? JSON.parse(raw) : []);
+    });
+  } catch (err) {
+    console.error('Error in subscribeToTransfers:', err);
+    const raw = localStorage.getItem('amrr_transfers');
+    callback(raw ? JSON.parse(raw) : []);
+    return () => {};
+  }
+}
+
+// Save an Internal Account Transfer (does not affect Revenue, Expenses or Profit)
+export async function saveAccountTransfer(transfer: AccountTransfer): Promise<void> {
+  try {
+    const raw = localStorage.getItem('amrr_transfers');
+    const list: AccountTransfer[] = raw ? JSON.parse(raw) : [];
+    list.unshift(transfer);
+    localStorage.setItem('amrr_transfers', JSON.stringify(list));
+  } catch {
+    // ignore
+  }
+
+  try {
+    await setDoc(doc(db, 'transfers', transfer.id), transfer, { merge: true });
+
+    // Post to transaction journal
+    await saveAccountingTransaction({
+      id: 'tx_trf_' + transfer.id,
+      date: transfer.date,
+      type: 'transfer',
+      amount: transfer.amount,
+      description: `Transfer: ${transfer.fromAccountName} → ${transfer.toAccountName}`,
+      category: 'Transfer',
+      accountId: transfer.fromAccountId,
+      accountName: transfer.fromAccountName,
+      toAccountId: transfer.toAccountId,
+      toAccountName: transfer.toAccountName,
+      paymentMethod: 'Bank Transfer',
+      paymentStatus: 'Completed',
+      referenceNumber: transfer.referenceNumber || '',
+      notes: transfer.notes || '',
+      createdAt: transfer.createdAt
+    });
+
+    // Debit source account
+    const fromRef = doc(db, 'financial_accounts', transfer.fromAccountId);
+    await setDoc(fromRef, {
+      id: transfer.fromAccountId,
+      totalMoneyOut: increment(transfer.amount),
+      currentBalance: increment(-transfer.amount),
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+
+    // Credit destination account
+    const toRef = doc(db, 'financial_accounts', transfer.toAccountId);
+    await setDoc(toRef, {
+      id: transfer.toAccountId,
+      totalMoneyIn: increment(transfer.amount),
+      currentBalance: increment(transfer.amount),
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    console.error('Error saving account transfer to Firestore:', err);
+  }
+}
+
+// ==========================================
+// 4. AUTOMATIC ORDER → ACCOUNTING INTEGRATION (IDEMPOTENT)
+// ==========================================
+
+export async function recordOrderSaleInAccounting(order: Order): Promise<void> {
+  // Requirement 6: Do NOT record revenue when order was cancelled or payment failed
+  if (!order || order.status === 'Cancelled' || order.totalAmount <= 0) return;
+
+  const txId = 'tx_order_' + order.id;
+
+  try {
+    // Check if transaction already exists (idempotency guard)
+    const existingDoc = await getDoc(doc(db, 'accounting_transactions', txId));
+    if (existingDoc.exists()) {
+      return; // Already recorded, prevent double accounting!
+    }
+
+    // Calculate COGS from item costPrice
+    const orderCogs = (order.items || []).reduce((acc, item) => {
+      const cost = item.product?.costPrice || 0;
+      return acc + (cost * item.quantity);
+    }, 0);
+
+    const paymentMethodLower = (order.paymentMethod || '').toLowerCase();
+    let accountId = 'acc_razorpay';
+    let accountName = 'Razorpay Gateway';
+
+    if (paymentMethodLower.includes('cash') || paymentMethodLower.includes('cod')) {
+      accountId = 'acc_cash';
+      accountName = 'Cash in Hand (Store/Atelier)';
+    } else if (paymentMethodLower.includes('bank') || paymentMethodLower.includes('neft')) {
+      accountId = 'acc_bank';
+      accountName = 'Primary Bank Account';
+    } else if (paymentMethodLower.includes('upi')) {
+      accountId = 'acc_upi';
+      accountName = 'Direct UPI Merchant';
+    }
+
+    const saleTransaction: AccountingTransaction = {
+      id: txId,
+      date: order.createdAt || new Date().toISOString(),
+      type: 'sale',
+      amount: order.totalAmount,
+      description: `Sale: Order #${order.id} - ${(order.items || []).map(i => `${i.product.name} (x${i.quantity})`).join(', ')}`,
+      category: 'Product Sales',
+      accountId,
+      accountName,
+      orderId: order.id,
+      customerName: order.shippingDetails?.fullName || 'Customer',
+      customerEmail: order.shippingDetails?.email || '',
+      paymentMethod: order.paymentMethod || 'Razorpay',
+      paymentStatus: 'Completed',
+      razorpayPaymentId: order.paymentId || '',
+      razorpayOrderId: order.razorpayOrderId || '',
+      cogs: orderCogs,
+      notes: `Order placed by ${order.shippingDetails?.fullName || 'patron'} (${order.items.length} items)`,
+      createdAt: order.createdAt || new Date().toISOString()
+    };
+
+    await saveAccountingTransaction(saleTransaction);
+
+    // Update account balance (Money In)
+    const accRef = doc(db, 'financial_accounts', accountId);
+    await setDoc(accRef, {
+      id: accountId,
+      totalMoneyIn: increment(order.totalAmount),
+      currentBalance: increment(order.totalAmount),
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+
+    console.log(`Accounting sale recorded for Order #${order.id}: +₹${order.totalAmount}`);
+  } catch (err) {
+    console.error('Error recording order sale in accounting:', err);
+  }
+}
+
+// Record an order refund in accounting
+export async function recordRefundInAccounting(
+  order: Order, 
+  refundAmount: number, 
+  reason?: string
+): Promise<void> {
+  if (!order || refundAmount <= 0) return;
+
+  const refundTxId = `tx_refund_${order.id}_${Date.now()}`;
+  const nowIso = new Date().toISOString();
+
+  try {
+    const refundTransaction: AccountingTransaction = {
+      id: refundTxId,
+      date: nowIso,
+      type: 'refund',
+      amount: refundAmount,
+      description: `Refund: Order #${order.id}${reason ? ` (${reason})` : ''}`,
+      category: 'Product Sales',
+      accountId: 'acc_razorpay',
+      accountName: 'Razorpay Gateway',
+      orderId: order.id,
+      customerName: order.shippingDetails?.fullName || 'Customer',
+      customerEmail: order.shippingDetails?.email || '',
+      paymentMethod: order.paymentMethod || 'Razorpay',
+      paymentStatus: 'Refunded',
+      razorpayPaymentId: order.paymentId || '',
+      razorpayOrderId: order.razorpayOrderId || '',
+      notes: reason || 'Customer requested refund',
+      createdAt: nowIso
+    };
+
+    await saveAccountingTransaction(refundTransaction);
+
+    // Update Order document in Firestore with refund record
+    const totalRefunded = (order.refundAmount || 0) + refundAmount;
+    const orderRef = doc(db, 'orders', order.id);
+    await setDoc(orderRef, {
+      refundAmount: totalRefunded,
+      refundReason: reason || order.refundReason || 'Customer Refund',
+      refundedAt: nowIso,
+      updatedAt: nowIso
+    }, { merge: true });
+
+    // Adjust financial account balance
+    const accRef = doc(db, 'financial_accounts', 'acc_razorpay');
+    await setDoc(accRef, {
+      id: 'acc_razorpay',
+      totalMoneyOut: increment(refundAmount),
+      currentBalance: increment(-refundAmount),
+      updatedAt: nowIso
+    }, { merge: true });
+
+    console.log(`Refund of ₹${refundAmount} recorded for Order #${order.id}`);
+  } catch (err) {
+    console.error('Error recording refund in accounting:', err);
+  }
+}
+
+// Synchronize all existing orders to accounting (safely & idempotently)
+export async function syncAllOrdersToAccounting(orders: Order[]): Promise<void> {
+  if (!orders || orders.length === 0) return;
+
+  for (const o of orders) {
+    if (o.status !== 'Cancelled' && o.totalAmount > 0) {
+      await recordOrderSaleInAccounting(o);
+    }
+  }
+}
+

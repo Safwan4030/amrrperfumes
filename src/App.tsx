@@ -37,7 +37,16 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          return parsed.map((p: any) =>
+            !p.category || p.category.toLowerCase().includes('parfum')
+              ? {
+                  ...p,
+                  category: 'Extrait de Parfum',
+                  concentration: 'Extrait de Parfum',
+                  subtitle: p.subtitle ? p.subtitle.replace(/Eau de Parfum/gi, 'Extrait de Parfum') : 'Extrait de Parfum (50 ml)'
+                }
+              : p
+          );
         }
       }
     } catch (e) {
@@ -220,7 +229,7 @@ export default function App() {
     const unsubscribe = subscribeToOrders((firestoreOrders) => {
       if (firestoreOrders) {
         setOrders(firestoreOrders);
-        if (isAdmin && firestoreOrders.length > 0) {
+        if (firestoreOrders.length > 0) {
           syncExistingOrdersToCustomerLeads(firestoreOrders);
         }
       }
@@ -238,12 +247,27 @@ export default function App() {
   const [showQuiz, setShowQuiz] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [adminInitialTab, setAdminInitialTab] = useState<'orders' | 'inventory' | 'customers' | 'accounts' | 'traffic' | 'delhivery-test' | 'inbox' | undefined>(undefined);
 
-  // Quick admin opening via Alt+A shortcut or #admin URL hash
+  // Quick admin opening via Alt+A shortcut, /admin/accounts route, or #admin URL hash
   useEffect(() => {
-    if (window.location.hash === '#admin' || window.location.search.includes('admin=true')) {
-      setShowAdmin(true);
-    }
+    const handleUrlRoute = () => {
+      const path = (window.location.pathname || '').toLowerCase();
+      const hash = (window.location.hash || '').toLowerCase();
+      const search = (window.location.search || '').toLowerCase();
+
+      if (path.includes('/admin/accounts') || hash.includes('accounts')) {
+        setAdminInitialTab('accounts');
+        setShowAdmin(true);
+      } else if (path.startsWith('/admin') || hash.startsWith('#admin') || search.includes('admin=true')) {
+        setShowAdmin(true);
+      }
+    };
+
+    handleUrlRoute();
+    window.addEventListener('popstate', handleUrlRoute);
+    window.addEventListener('hashchange', handleUrlRoute);
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.altKey && (e.key === 'a' || e.key === 'A')) || (e.ctrlKey && e.shiftKey && (e.key === 'a' || e.key === 'A'))) {
         e.preventDefault();
@@ -251,7 +275,11 @@ export default function App() {
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('popstate', handleUrlRoute);
+      window.removeEventListener('hashchange', handleUrlRoute);
+    };
   }, []);
   
   // Checkout & Payment State
@@ -396,8 +424,9 @@ export default function App() {
 
   const wishlistProducts = products.filter(p => wishlistIds.includes(p.id));
 
-  // Extract all distinct categories from current catalog
-  const distinctCategories: string[] = Array.from(new Set(products.map(p => p.category))).filter((cat): cat is string => typeof cat === 'string' && cat.length > 0);
+  // Extract all distinct categories from current catalog (excluding core Extrait de Parfum)
+  const distinctCategories: string[] = Array.from(new Set(products.map(p => p.category)))
+    .filter((cat): cat is string => typeof cat === 'string' && cat.length > 0 && cat !== 'Extrait de Parfum' && cat !== 'Eau de Parfum');
 
   const filteredProducts = activeCategory === 'all'
     ? products
@@ -434,14 +463,14 @@ export default function App() {
       {/* Product Collection Showcase - Signature Collections */}
       <section id="collections" className="py-12 sm:py-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 sm:space-y-8">
         
-        {/* Section Header matching the screenshot */}
+        {/* Section Header */}
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-gray-200/80 pb-4">
           <div className="space-y-1 text-left">
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-black">
               Signature Collections
             </h2>
             <p className="text-xs sm:text-sm text-gray-500 font-normal">
-              Artisanal 50ml Eau de Parfum • High-Concentrate French Essences
+              Artisanal 50ml Extrait de Parfum • High-Concentrate French Essences
             </p>
           </div>
 
@@ -451,7 +480,7 @@ export default function App() {
               { id: 'all', label: 'THE AMRR COLLECTION' },
               { id: 'signature', label: 'SIGNATURE SCENTS' },
               ...distinctCategories
-                .filter(cat => cat !== 'Eau de Parfum')
+                .filter(cat => cat !== 'Eau de Parfum' && cat !== 'Extrait de Parfum')
                 .map(cat => ({ id: cat.toLowerCase(), label: cat.toUpperCase() }))
             ].map((cat) => {
               const isActive = activeCategory === cat.id;
@@ -630,6 +659,7 @@ export default function App() {
         orders={orders}
         currency={currency}
         currentUserEmail={currentUser?.email}
+        initialTab={adminInitialTab}
         onOpenLogin={() => setShowAccount(true)}
         onUpdateProduct={(updated) => {
           setProducts((prev) => prev.map(p => p.id === updated.id ? updated : p));

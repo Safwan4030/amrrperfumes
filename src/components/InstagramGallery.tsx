@@ -8,7 +8,7 @@ import packagingImg from '../assets/images/amrr_luxury_set_1787897361370.jpg';
 
 export const InstagramGallery: React.FC = () => {
   const posts = [
-    { id: 1, image: khaelValleyImg, title: 'Khael Valley Eau de Parfum', likes: '14.2k' },
+    { id: 1, image: khaelValleyImg, title: 'Khael Valley Extrait de Parfum', likes: '14.2k' },
     { id: 2, image: kaahfImg, title: 'Kaahf Fresh Marine Signature', likes: '11.8k' },
     { id: 3, image: roseyOudImg, title: 'Rosey Oud Pure Extract', likes: '16.5k' },
     { id: 4, image: packagingImg, title: 'Artisanal Batch Presentation', likes: '19.3k' },

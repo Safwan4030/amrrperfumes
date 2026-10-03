@@ -32,9 +32,21 @@ import {
   Filter,
   Eye,
   Users,
-  Globe
+  Globe,
+  Wallet
 } from 'lucide-react';
-import { Product, Order, DelhiveryScanEvent, CustomerInboxMessage, CustomerLead, SiteVisitorStats } from '../types';
+import { 
+  Product, 
+  Order, 
+  DelhiveryScanEvent, 
+  CustomerInboxMessage, 
+  CustomerLead, 
+  SiteVisitorStats,
+  FinancialAccount,
+  AccountingTransaction,
+  ExpenseItem,
+  AccountTransfer
+} from '../types';
 import { Currency, formatPrice } from '../utils/helpers';
 import { PRESET_IMAGES } from '../data/products';
 import { 
@@ -42,10 +54,17 @@ import {
   updateMessageStatusInFirestore, 
   deleteMessageFromFirestore,
   subscribeToSiteStats,
-  subscribeToCustomerLeads
+  subscribeToCustomerLeads,
+  syncExistingOrdersToCustomerLeads,
+  subscribeToFinancialAccounts,
+  subscribeToAccountingTransactions,
+  subscribeToExpenses,
+  subscribeToTransfers,
+  syncAllOrdersToAccounting
 } from '../lib/firebase';
 import { AdminCustomersTab } from './AdminCustomersTab';
 import { AdminTrafficTab } from './AdminTrafficTab';
+import { AdminAccountsTab } from './AdminAccountsTab';
 import { 
   createDelhiveryShipment, 
   trackDelhiveryShipment, 
@@ -61,6 +80,7 @@ interface AdminDashboardProps {
   orders: Order[];
   currency: Currency;
   currentUserEmail?: string;
+  initialTab?: 'orders' | 'inventory' | 'customers' | 'accounts' | 'traffic' | 'delhivery-test' | 'inbox';
   onOpenLogin?: () => void;
   onUpdateProduct: (updated: Product) => void;
   onAddProduct?: (newProduct: Product) => void;
@@ -75,6 +95,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   orders,
   currency,
   currentUserEmail,
+  initialTab,
   onOpenLogin,
   onUpdateProduct,
   onAddProduct,
@@ -97,8 +118,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   }, [isVerifiedAdminEmail, isOpen]);
 
-  // Tab State
-  const [activeTab, setActiveTab] = useState<'orders' | 'inventory' | 'customers' | 'traffic' | 'delhivery-test' | 'inbox'>('orders');
+  // Tab State (Default or initialTab)
+  const [activeTab, setActiveTab] = useState<'orders' | 'inventory' | 'customers' | 'accounts' | 'traffic' | 'delhivery-test' | 'inbox'>(initialTab || 'orders');
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
+
+  // Accounts & Accounting State
+  const [financialAccounts, setFinancialAccounts] = useState<FinancialAccount[]>([]);
+  const [accountingTransactions, setAccountingTransactions] = useState<AccountingTransaction[]>([]);
+  const [accountingExpenses, setAccountingExpenses] = useState<ExpenseItem[]>([]);
+  const [accountingTransfers, setAccountingTransfers] = useState<AccountTransfer[]>([]);
 
   // Site Visitors Analytics & Customer CRM State
   const [siteStats, setSiteStats] = useState<SiteVisitorStats | null>(null);
@@ -127,12 +160,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Product Form State
   const [formState, setFormState] = useState({
     name: '',
-    subtitle: 'Eau de Parfum (50 ml)',
-    category: 'Eau de Parfum',
+    subtitle: 'Extrait de Parfum (50 ml)',
+    category: 'Extrait de Parfum',
     customCategory: '',
     family: 'Woody Oud',
     price50ml: 999,
     originalPrice50ml: 1299,
+    costPrice: undefined as number | undefined,
     stockQuantity: 20,
     inStock: true,
     shortDescription: 'Exquisite artisanal formulation crafted with rare botanical essences.',
@@ -148,7 +182,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     isBestSeller: false,
     isNewArrival: false,
     isLimitedEdition: false,
-    concentration: 'Eau de Parfum',
+    concentration: 'Extrait de Parfum',
     ingredients: 'Alcohol Denat., Parfum (Fragrance), Aqua (Water), Limonene, Linalool.'
   });
 
@@ -202,14 +236,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const unsubscribeLeads = subscribeToCustomerLeads((leads) => {
         setCustomerLeads(leads);
       });
+      const unsubscribeAccounts = subscribeToFinancialAccounts((accs) => {
+        setFinancialAccounts(accs);
+      });
+      const unsubscribeTxns = subscribeToAccountingTransactions((txns) => {
+        setAccountingTransactions(txns);
+      });
+      const unsubscribeExpenses = subscribeToExpenses((exps) => {
+        setAccountingExpenses(exps);
+      });
+      const unsubscribeTransfers = subscribeToTransfers((trfs) => {
+        setAccountingTransfers(trfs);
+      });
+
+      // Synchronize all completed orders into persistent Cloud CRM & Accounting
+      if (orders && orders.length > 0) {
+        syncExistingOrdersToCustomerLeads(orders).catch(() => {});
+        syncAllOrdersToAccounting(orders).catch(() => {});
+      }
 
       return () => {
         unsubscribeMessages();
         unsubscribeStats();
         unsubscribeLeads();
+        unsubscribeAccounts();
+        unsubscribeTxns();
+        unsubscribeExpenses();
+        unsubscribeTransfers();
       };
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, orders]);
 
   if (!isOpen) return null;
 
@@ -223,12 +279,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setFormSuccessMessage(null);
     setFormState({
       name: '',
-      subtitle: 'Eau de Parfum (50 ml)',
-      category: 'Eau de Parfum',
+      subtitle: 'Extrait de Parfum (50 ml)',
+      category: 'Extrait de Parfum',
       customCategory: '',
       family: 'Woody Oud',
       price50ml: 999,
       originalPrice50ml: 1299,
+      costPrice: undefined,
       stockQuantity: 20,
       inStock: true,
       shortDescription: 'Exquisite artisanal formulation crafted with rare botanical essences.',
@@ -244,7 +301,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       isBestSeller: false,
       isNewArrival: true,
       isLimitedEdition: false,
-      concentration: 'Eau de Parfum',
+      concentration: 'Extrait de Parfum',
       ingredients: 'Alcohol Denat., Parfum (Fragrance), Aqua (Water), Limonene, Linalool.'
     });
     setIsProductModalOpen(true);
@@ -256,7 +313,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setEditingOriginalId(p.id);
     setFormErrorMessage(null);
     setFormSuccessMessage(null);
-    const standardCategories = ['Eau de Parfum', 'Extrait de Parfum', 'Perfume Oil', 'Concentrated Attar', 'Cologne', 'Body Mist'];
+    const standardCategories = ['Extrait de Parfum', 'Perfume Oil', 'Concentrated Attar', 'Cologne', 'Body Mist'];
     const isStandard = standardCategories.includes(p.category);
 
     setFormState({
@@ -267,6 +324,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       family: p.family || 'Woody Oud',
       price50ml: p.price50ml,
       originalPrice50ml: p.originalPrice50ml || Math.round(p.price50ml * 1.25),
+      costPrice: p.costPrice,
       stockQuantity: p.stockQuantity ?? 15,
       inStock: p.inStock ?? true,
       shortDescription: p.shortDescription || '',
@@ -322,7 +380,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
 
     const effectiveCategory = formState.category === 'Custom'
-      ? (formState.customCategory.trim() || 'Eau de Parfum')
+      ? (formState.customCategory.trim() || 'Extrait de Parfum')
       : formState.category;
 
     const parseNotes = (str: string) => 
@@ -342,6 +400,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       family: formState.family.trim() || 'Woody Oud',
       price50ml: Number(formState.price50ml),
       originalPrice50ml: Number(formState.originalPrice50ml) || undefined,
+      costPrice: formState.costPrice !== undefined && formState.costPrice !== null && !isNaN(Number(formState.costPrice)) ? Number(formState.costPrice) : (existing?.costPrice || undefined),
       availableSizes: ['50 ml'],
       stockQuantity: Number(formState.stockQuantity),
       inStock: Boolean(formState.inStock && Number(formState.stockQuantity) > 0),
@@ -742,6 +801,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     }`}
                   >
                     <Layers className="w-3.5 h-3.5" /> Product Inventory ({products.length})
+                  </button>
+
+                  {/* Accounts / Accounting Tab */}
+                  <button
+                    onClick={() => setActiveTab('accounts')}
+                    className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                      activeTab === 'accounts' ? 'bg-black text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <Wallet className="w-3.5 h-3.5" /> Accounts
                   </button>
 
                   {/* Customers CRM Tab */}
@@ -1483,6 +1552,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               )}
 
+              {/* TAB: ACCOUNTS & ACCOUNTING */}
+              {activeTab === 'accounts' && (
+                <AdminAccountsTab
+                  orders={orders}
+                  products={products}
+                  currency={currency}
+                  accounts={financialAccounts}
+                  transactions={accountingTransactions}
+                  expenses={accountingExpenses}
+                  transfers={accountingTransfers}
+                />
+              )}
+
               {/* TAB: CUSTOMERS & LEADS CRM (GMAIL & WHATSAPP) */}
               {activeTab === 'customers' && (
                 <AdminCustomersTab customers={customerLeads} />
@@ -1682,7 +1764,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         type="text"
                         value={formState.subtitle}
                         onChange={(e) => setFormState(prev => ({ ...prev, subtitle: e.target.value }))}
-                        placeholder="e.g. Eau de Parfum (50 ml)"
+                        placeholder="e.g. Extrait de Parfum (50 ml)"
                         className="w-full p-2 bg-white border border-gray-300 rounded-lg text-black focus:ring-1 focus:ring-black outline-none"
                       />
                     </div>
@@ -1698,8 +1780,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         onChange={(e) => setFormState(prev => ({ ...prev, category: e.target.value }))}
                         className="w-full p-2 bg-white border border-gray-300 rounded-lg text-black focus:ring-1 focus:ring-black outline-none cursor-pointer"
                       >
-                        <option value="Eau de Parfum">Eau de Parfum</option>
                         <option value="Extrait de Parfum">Extrait de Parfum</option>
+                        <option value="Eau de Parfum">Eau de Parfum</option>
                         <option value="Perfume Oil">Perfume Oil</option>
                         <option value="Concentrated Attar">Concentrated Attar</option>
                         <option value="Cologne">Cologne</option>
@@ -1854,7 +1936,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <Sliders className="w-3.5 h-3.5" /> 3. Pricing, Stock &amp; Badges
                   </h5>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     <div>
                       <label className="block text-[11px] font-bold text-gray-700 mb-1">
                         50ml Selling Price (₹) <span className="text-red-500">*</span>
@@ -1879,6 +1961,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         value={formState.originalPrice50ml}
                         onChange={(e) => setFormState(prev => ({ ...prev, originalPrice50ml: Number(e.target.value) }))}
                         placeholder="e.g. 1499"
+                        className="w-full p-2 bg-white border border-gray-300 rounded-lg text-black outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                        Unit Cost Price (₹ COGS) <span className="text-gray-400 font-normal">(Optional)</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={formState.costPrice !== undefined ? formState.costPrice : ''}
+                        onChange={(e) => setFormState(prev => ({ ...prev, costPrice: e.target.value !== '' ? Number(e.target.value) : undefined }))}
+                        placeholder="e.g. 180"
                         className="w-full p-2 bg-white border border-gray-300 rounded-lg text-black outline-none"
                       />
                     </div>

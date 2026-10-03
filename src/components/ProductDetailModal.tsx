@@ -123,7 +123,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   <div className="p-3.5 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100/60 transition-colors flex justify-between items-center">
                     <div>
                       <span className="block font-bold text-sm text-black">50 ml</span>
-                      <span className="text-xs text-gray-500">1.7 FL.OZ Pure Eau de Parfum</span>
+                      <span className="text-xs text-gray-500">1.7 FL.OZ Pure Extrait de Parfum</span>
                     </div>
                     <span className="font-bold text-sm text-black">
                       {formatPrice(product.price50ml, currency)}

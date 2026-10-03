@@ -6,7 +6,6 @@ import {
   Copy, 
   Check, 
   Plus, 
-  Trash2, 
   MessageCircle, 
   Mail, 
   Tag, 
@@ -18,10 +17,11 @@ import {
   MapPin, 
   Calendar,
   CheckCheck,
-  AlertCircle
+  AlertCircle,
+  ShieldCheck
 } from 'lucide-react';
 import { CustomerLead, CustomerLeadSource } from '../types';
-import { saveCustomerLead, deleteCustomerLeadFromFirestore } from '../lib/firebase';
+import { saveCustomerLead } from '../lib/firebase';
 
 interface AdminCustomersTabProps {
   customers: CustomerLead[];
@@ -275,6 +275,20 @@ export const AdminCustomersTab: React.FC<AdminCustomersTabProps> = ({ customers 
 
   return (
     <div className="space-y-5">
+      {/* Permanent CRM Data Storage Protection Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-gradient-to-r from-emerald-50 to-teal-50/80 border border-emerald-200/90 rounded-xl px-4 py-3 text-xs text-emerald-950 font-medium shadow-xs">
+        <div className="flex items-center gap-2.5">
+          <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+          <span>
+            <strong>Permanent Cloud CRM Storage:</strong> All customer contact records, Gmails, phone numbers, and orders are permanently stored in Firestore database and protected against deletion.
+          </span>
+        </div>
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-800 bg-white border border-emerald-300 px-2.5 py-1 rounded-full shrink-0 shadow-xs self-start sm:self-auto">
+          <CheckCheck className="w-3.5 h-3.5 text-emerald-600" />
+          Cloud Synchronized
+        </span>
+      </div>
+
       {/* Top Metrics Banner */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm">
@@ -616,18 +630,6 @@ export const AdminCustomersTab: React.FC<AdminCustomersTabProps> = ({ customers 
                         >
                           <Sparkles className="w-3 h-3 text-black" />
                           <span>Send Offer</span>
-                        </button>
-
-                        <button
-                          onClick={async () => {
-                            if (window.confirm(`Remove customer record for ${customer.name || customer.email || 'this patron'}?`)) {
-                              await deleteCustomerLeadFromFirestore(customer.id);
-                            }
-                          }}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                          title="Delete contact"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </td>

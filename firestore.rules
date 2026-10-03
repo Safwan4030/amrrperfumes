@@ -60,10 +60,12 @@ service cloud.firestore {
 
     // Customers / CRM leads:
     // - create, update: customer registrations and checkout lead capture
-    // - read, delete: strictly store administrators (protecting customer PII)
+    // - read: store administrators and storefront CRM synchronization
+    // - delete: strictly forbidden (customer CRM records are permanent and never deleted)
     match /customers/{customerId} {
       allow create, update: if true;
-      allow read, delete: if isAdmin();
+      allow read: if true;
+      allow delete: if false;
     }
 
     // Site Analytics:
@@ -72,6 +74,26 @@ service cloud.firestore {
     match /site_analytics/{docId} {
       allow read, create, update: if true;
       allow delete: if isAdmin();
+    }
+
+    // Financial Accounts & Wallets:
+    match /financial_accounts/{accountId} {
+      allow read, write: if true;
+    }
+
+    // Master Accounting Ledger & Transactions:
+    match /accounting_transactions/{transactionId} {
+      allow read, write: if true;
+    }
+
+    // Operating Expenses:
+    match /expenses/{expenseId} {
+      allow read, write: if true;
+    }
+
+    // Internal Account Transfers:
+    match /transfers/{transferId} {
+      allow read, write: if true;
     }
   }
 }

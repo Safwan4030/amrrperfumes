@@ -93,7 +93,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenQuiz }) => {
   };
 
   const faqs = [
-    { q: 'How long do AMRR Perfumes last on skin and clothes?', a: 'All AMRR Perfumes creations are formulated as Eau de Parfum, yielding 18+ hours on fabrics and 12-14 hours of persistent projection on skin.' },
+    { q: 'How long do AMRR Perfumes last on skin and clothes?', a: 'All AMRR Perfumes creations are formulated as Extrait de Parfum, yielding 18+ hours on fabrics and 12-14 hours of persistent projection on skin.' },
     { q: 'What is the bottle volume and formulation?', a: 'Every fragrance is bottled in a heavy 50ml crystal flacon featuring a custom magnetic cap and precision high-output atomizer.' },
     { q: 'What payment methods are supported?', a: 'We accept Cash On Delivery (COD), UPI (Google Pay, PhonePe, Paytm), Net Banking, and all major Credit/Debit Cards with 256-bit encryption.' },
   ];
@@ -111,7 +111,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenQuiz }) => {
               <AmrrLogo size="md" variant="light" />
             </div>
             <p className="text-xs text-gray-400 font-normal leading-relaxed max-w-sm">
-              &quot;They will remember you before they remember your name.&quot; Handcrafting Eau de Parfum and pure French perfume oils for connoisseurs across India and beyond.
+              &quot;They will remember you before they remember your name.&quot; Handcrafting Extrait de Parfum and pure French perfume oils for connoisseurs across India and beyond.
             </p>
           </div>
 

@@ -16,14 +16,14 @@ export const BrandStory: React.FC = () => {
         </h2>
 
         <p className="text-base text-gray-700 font-normal leading-relaxed max-w-2xl mx-auto">
-          At AMRR Perfumes, we believe fragrance is the most intimate form of memory. Handcrafted in small artisanal batches with pure Eau de Parfum concentration and premium essences, our creations are formulated to project with refined elegance all day and night.
+          At AMRR Perfumes, we believe fragrance is the most intimate form of memory. Handcrafted in small artisanal batches with pure Extrait de Parfum concentration and premium essences, our creations are formulated to project with refined elegance all day and night.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 text-left max-w-3xl mx-auto">
           <div className="p-5 rounded-2xl bg-gray-50 border border-gray-200 space-y-2 shadow-sm">
             <div className="flex items-center gap-2 text-black font-bold text-xs uppercase tracking-wider">
               <Award className="w-4 h-4" />
-              Eau de Parfum Power
+              Extrait de Parfum Power
             </div>
             <p className="text-xs text-gray-600 font-normal">
               18+ hours persistent longevity with distinct top, heart, and base transformations.

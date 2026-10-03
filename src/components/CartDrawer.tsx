@@ -125,7 +125,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
-                      <p className="text-xs text-gray-500">{item.selectedSize} Eau de Parfum</p>
+                      <p className="text-xs text-gray-500">{item.selectedSize} Extrait de Parfum</p>
                     </div>
 
                     <div className="flex justify-between items-center mt-2">

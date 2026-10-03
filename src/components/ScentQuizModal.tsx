@@ -149,7 +149,7 @@ export const ScentQuizModal: React.FC<ScentQuizModalProps> = ({
                   <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{recommendation.family}</span>
                   <h4 className="text-2xl font-bold text-black">{recommendation.name}</h4>
                   <p className="text-xs text-gray-600 leading-relaxed font-normal">{recommendation.shortDescription}</p>
-                  <p className="text-base font-extrabold text-black pt-1">{formatPrice(recommendation.price50ml, currency)} <span className="text-xs font-normal text-gray-500">(50ml Eau de Parfum)</span></p>
+                  <p className="text-base font-extrabold text-black pt-1">{formatPrice(recommendation.price50ml, currency)} <span className="text-xs font-normal text-gray-500">(50ml Extrait de Parfum)</span></p>
                 </div>
               </div>
 

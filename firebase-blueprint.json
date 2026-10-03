@@ -70,6 +70,90 @@
         "lastVisitDate": { "type": "string" },
         "lastVisitAt": { "type": "string" }
       }
+    },
+    "financial_accounts": {
+      "title": "Financial Accounts",
+      "description": "Store wallets, bank accounts, cash registers and Razorpay accounts",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "openingBalance": { "type": "number" },
+        "currentBalance": { "type": "number" },
+        "totalMoneyIn": { "type": "number" },
+        "totalMoneyOut": { "type": "number" },
+        "accountNumber": { "type": "string" },
+        "bankName": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["name", "type"]
+    },
+    "accounting_transactions": {
+      "title": "Accounting Transactions",
+      "description": "Master financial transaction ledger (Sales, Expenses, Refunds, Transfers)",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "type": { "type": "string" },
+        "amount": { "type": "number" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "accountId": { "type": "string" },
+        "accountName": { "type": "string" },
+        "toAccountId": { "type": "string" },
+        "toAccountName": { "type": "string" },
+        "orderId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerEmail": { "type": "string" },
+        "vendorName": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "paymentStatus": { "type": "string" },
+        "razorpayPaymentId": { "type": "string" },
+        "razorpayOrderId": { "type": "string" },
+        "referenceNumber": { "type": "string" },
+        "notes": { "type": "string" },
+        "cogs": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["date", "type", "amount", "category"]
+    },
+    "expenses": {
+      "title": "Expenses",
+      "description": "Operating expenses, materials, ads and packaging expenses",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "supplier": { "type": "string" },
+        "amount": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "accountId": { "type": "string" },
+        "accountName": { "type": "string" },
+        "referenceNumber": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["date", "description", "category", "amount"]
+    },
+    "transfers": {
+      "title": "Transfers",
+      "description": "Internal money transfers between cash, bank, and payment accounts",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "fromAccountId": { "type": "string" },
+        "fromAccountName": { "type": "string" },
+        "toAccountId": { "type": "string" },
+        "toAccountName": { "type": "string" },
+        "amount": { "type": "number" },
+        "referenceNumber": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["date", "fromAccountId", "toAccountId", "amount"]
     }
   },
   "firestore": {
@@ -92,6 +176,22 @@
     "/site_analytics/{docId}": {
       "schema": { "$ref": "#/entities/site_analytics" },
       "description": "Aggregated site visitor counters"
+    },
+    "/financial_accounts/{accountId}": {
+      "schema": { "$ref": "#/entities/financial_accounts" },
+      "description": "Store accounts and balance ledgers"
+    },
+    "/accounting_transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/accounting_transactions" },
+      "description": "Financial accounting master journal entries"
+    },
+    "/expenses/{expenseId}": {
+      "schema": { "$ref": "#/entities/expenses" },
+      "description": "Operating expense documents"
+    },
+    "/transfers/{transferId}": {
+      "schema": { "$ref": "#/entities/transfers" },
+      "description": "Account transfer log records"
     }
   }
 }

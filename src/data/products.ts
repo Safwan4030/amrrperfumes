@@ -13,8 +13,8 @@ export const INITIAL_PRODUCTS: Product[] = [
   {
     id: 'khael-valley',
     name: 'Khael Valley',
-    subtitle: 'Eau de Parfum (50 ml)',
-    category: 'Eau de Parfum',
+    subtitle: 'Extrait de Parfum (50 ml)',
+    category: 'Extrait de Parfum',
     family: 'Woody Oud',
     shortDescription: 'Our signature masterpiece. A regal accord of rare Cambodian agarwood, crisp Italian bergamot, and warm Madagascar vanilla.',
     story: 'Khael Valley was formulated for those who leave an indelible presence without saying a word. Anchored by 20-year aged wild agarwood and lifted by botanical bergamot and French clary sage, it embodies understated power and timeless sophistication.',
@@ -42,7 +42,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     gender: 'Unisex',
     season: ['Autumn', 'Winter', 'Cool Evenings'],
     occasion: ['Gala & Black Tie', 'Executive Boardroom', 'Intimate Evenings'],
-    concentration: 'Eau de Parfum',
+    concentration: 'Extrait de Parfum',
     ingredients: 'Alcohol Denat., Parfum (Fragrance), Aqua (Water), Limonene, Linalool, Alpha-Isomethyl Ionone, Eugenol, Citral.',
     reviews: [
       {
@@ -67,7 +67,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     id: 'kaahf',
     name: 'Kaahf',
     subtitle: 'Fresh Marine & Green Citrus (50 ml)',
-    category: 'Eau de Parfum',
+    category: 'Extrait de Parfum',
     family: 'Fresh Aquatic',
     shortDescription: 'Crisp coastal sea salt, sparkling pink grapefruit, and sun-drenched cedarwood. The ultimate uplifting luxury signature.',
     story: 'Inspired by early dawn over the Mediterranean coastline, Kaahf opens with an invigorating burst of sea spray and grapefruit, grounding smoothly into mossy oakwood and clean white musk.',
@@ -95,7 +95,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     gender: 'Unisex',
     season: ['Spring', 'Summer', 'All-Day Wear'],
     occasion: ['Daytime Elegance', 'Yacht & Resort', 'Business Casual'],
-    concentration: 'Eau de Parfum',
+    concentration: 'Extrait de Parfum',
     ingredients: 'Alcohol Denat., Parfum (Fragrance), Aqua (Water), Benzyl Salicylate, Citronellol, Coumarin, Geraniol.',
     reviews: [
       {
@@ -112,7 +112,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     id: 'rosey-oud',
     name: 'Rosey Oud',
     subtitle: 'Velvety Damask Rose & Smoky Oud (50 ml)',
-    category: 'Eau de Parfum',
+    category: 'Extrait de Parfum',
     family: 'Oriental Floral',
     shortDescription: 'Velvety Damask rose petals infused with smoky Assam agarwood, amber, and warm saffron. Seductive, romantic, and deeply opulent.',
     story: 'Rosey Oud is an enchanting symphony of contrast. Intoxicating Bulgarian and Damask roses bloom over a heart of dark Assam oud, wrapped in golden amber and creamy sandalwood for a sensual, long-lasting trail.',
@@ -141,7 +141,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     gender: 'Unisex',
     season: ['Autumn', 'Winter', 'Special Evenings'],
     occasion: ['Romantic Dinners', 'Gala & Celebrations', 'Luxury Evening'],
-    concentration: 'Eau de Parfum',
+    concentration: 'Extrait de Parfum',
     ingredients: 'Alcohol Denat., Parfum (Fragrance), Aqua (Water), Citronellol, Geraniol, Eugenol, Linalool, Farnesol.',
     reviews: [
       {
@@ -158,7 +158,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     id: 'akoya',
     name: 'Akoya',
     subtitle: 'Luminous Pearl Amber & Solar Florals (50 ml)',
-    category: 'Eau de Parfum',
+    category: 'Extrait de Parfum',
     family: 'Solar Amber Floral',
     shortDescription: 'Inspired by the iridescence of Akoya pearls. A radiant union of crisp white neroli, sea salt crystals, creamy solar jasmine, and crystalline white amber.',
     story: 'Named after the rare saltwater pearl prized for its mirror-like luster, Akoya captures pure radiance. Opening with saline sea breeze and luminous Italian neroli, it unfurls into sun-warmed jasmine and velvety white iris before settling onto a decadent base of driftwood and crystalline ambergris.',
@@ -186,7 +186,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     gender: 'Unisex',
     season: ['All Seasons', 'Spring & Summer', 'Day into Evening'],
     occasion: ['Signature Daily Luxury', 'Garden Parties', 'Intimate Gatherings'],
-    concentration: 'Eau de Parfum',
+    concentration: 'Extrait de Parfum',
     ingredients: 'Alcohol Denat., Parfum (Fragrance), Aqua (Water), Benzyl Salicylate, Hydroxycitronellal, Limonene, Linalool, Alpha-Isomethyl Ionone.',
     reviews: [
       {
@@ -203,7 +203,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     id: 'alif-escala',
     name: 'Alif Escala',
     subtitle: 'Prestige Saffron & Smoked Leather Accord (50 ml)',
-    category: 'Eau de Parfum',
+    category: 'Extrait de Parfum',
     family: 'Spicy Amber',
     shortDescription: 'An intoxicating statement of power and prestige. Saffron threads and wild raspberries meld with smoky Tuscan leather, black thyme, and opulent amber resin.',
     story: 'Alif Escala ascends to the apex of luxury perfumery. Conceived as an olfactory triumph of heritage and ambition, it blends fiery saffron threads with crushed night thyme and suede leather, grounded by the warmth of sacred amber and cedarwood.',
@@ -231,7 +231,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     gender: 'Unisex',
     season: ['Autumn', 'Winter', 'Formal Evenings'],
     occasion: ['Gala Evenings', 'Executive Presence', 'VIP Gatherings'],
-    concentration: 'Eau de Parfum',
+    concentration: 'Extrait de Parfum',
     ingredients: 'Alcohol Denat., Parfum (Fragrance), Aqua (Water), Limonene, Linalool, Alpha-Isomethyl Ionone, Eugenol, Isoeugenol.',
     reviews: [
       {
@@ -248,7 +248,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     id: 'musk-rijali',
     name: 'Musk Rijali',
     subtitle: 'Pure Royal White Musk & Cashmere Silk (50 ml)',
-    category: 'Eau de Parfum',
+    category: 'Extrait de Parfum',
     family: 'Regal Musk',
     shortDescription: 'The quintessential essence of royal purity. Silken Arabian white musk kissed by powdery Taif rose petals, sweet almond blossoms, and creamy sandalwood.',
     story: 'Musk Rijali is an homage to timeless Arabian perfumery traditions. Distilled with pure white musk of majestic softness, it envelopes the wearer in an aura of refined nobility, cleanliness, and velvet sensuality that lingers seamlessly throughout the day.',
@@ -276,7 +276,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     gender: 'Unisex',
     season: ['All Seasons', 'Signature Daily Wear'],
     occasion: ['Royal Daily Signature', 'Prayers & Meditation', 'Intimate Elegance'],
-    concentration: 'Eau de Parfum',
+    concentration: 'Extrait de Parfum',
     ingredients: 'Alcohol Denat., Parfum (Fragrance), Aqua (Water), Alpha-Isomethyl Ionone, Coumarin, Benzyl Benzoate, Linalool, Citronellol.',
     reviews: [
       {
@@ -293,10 +293,10 @@ export const INITIAL_PRODUCTS: Product[] = [
     id: 'armani-stronger',
     name: 'Armani Stronger',
     subtitle: 'Intense Cardamom, Glazed Chestnut & Warm Vanilla (50 ml)',
-    category: 'Eau de Parfum',
+    category: 'Extrait de Parfum',
     family: 'Warm Spicy Amber',
     shortDescription: 'An irresistible magnetic attraction. Spicy cardamom and crushed mint open into rich glazed chestnut, smoky sage, and Bourbon vanilla essence.',
-    story: 'Armani Stronger radiates unapologetic confidence and magnetic charm. An intoxicating fusion of warm spices and gourmet glazed chestnuts wrapped in smoky French clary sage and seductive cedarwood, formulated as an enduring eau de parfum.',
+    story: 'Armani Stronger radiates unapologetic confidence and magnetic charm. An intoxicating fusion of warm spices and gourmet glazed chestnuts wrapped in smoky French clary sage and seductive cedarwood, formulated as an enduring extrait de parfum.',
     price50ml: 999,
     originalPrice50ml: 1299,
     availableSizes: ['50 ml'],
@@ -321,7 +321,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     gender: 'Unisex',
     season: ['Autumn', 'Winter', 'Evening Dates'],
     occasion: ['Night Out', 'Romantic Evenings', 'Cold Weather Elegance'],
-    concentration: 'Eau de Parfum',
+    concentration: 'Extrait de Parfum',
     ingredients: 'Alcohol Denat., Parfum (Fragrance), Aqua (Water), Coumarin, Limonene, Linalool, Cinnamal, Eugenol.',
     reviews: [
       {
@@ -338,7 +338,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     id: 'summer-oud',
     name: 'Summer Oud',
     subtitle: 'Sun-Drenched Citrus & Airy Aquatic Oud (50 ml)',
-    category: 'Eau de Parfum',
+    category: 'Extrait de Parfum',
     family: 'Fresh Citrus Oud',
     shortDescription: 'The impossible made sublime: a vibrant, refreshing summer oud. Sunlit Mediterranean citrus and marine sea breeze fused with airy agarwood and golden vetiver.',
     story: 'Summer Oud defies convention by reimagining heavy Middle Eastern agarwood through a luminous coastal lens. Sparkling Sicilian bergamot, mandarin zest, and sea mineral spray illuminate a sheer, elegant white oud that breathes effortlessly in the warmest temperatures.',
@@ -366,7 +366,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     gender: 'Unisex',
     season: ['Summer', 'Spring', 'Hot Sunny Days'],
     occasion: ['Coastal Holidays', 'Brunch & Yachting', 'Daytime Signature'],
-    concentration: 'Eau de Parfum',
+    concentration: 'Extrait de Parfum',
     ingredients: 'Alcohol Denat., Parfum (Fragrance), Aqua (Water), Limonene, Linalool, Citronellol, Geraniol, Citral.',
     reviews: [
       {
