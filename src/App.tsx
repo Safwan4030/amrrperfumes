@@ -29,11 +29,36 @@ import {
   syncExistingOrdersToCustomerLeads 
 } from './lib/firebase';
 
+const CURRENT_CATALOG_VERSION = 'amrr-catalog-v2026.10-cd86015';
+
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [products, setProducts] = useState<Product[]>(() => {
     try {
+      const storedVersion = localStorage.getItem('amrr_catalog_version');
       const saved = localStorage.getItem('amrr_catalog_products');
+      
+      // If version mismatch (e.g. fresh deployment), refresh with current deployment's INITIAL_PRODUCTS
+      if (storedVersion !== CURRENT_CATALOG_VERSION) {
+        localStorage.setItem('amrr_catalog_version', CURRENT_CATALOG_VERSION);
+        
+        // Preserve any custom admin-created products (not present in default INITIAL_PRODUCTS)
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            const initialIds = new Set(INITIAL_PRODUCTS.map(p => p.id));
+            const customProducts = parsed.filter((p: any) => p && p.id && !initialIds.has(p.id));
+            if (customProducts.length > 0) {
+              const merged = [...INITIAL_PRODUCTS, ...customProducts];
+              localStorage.setItem('amrr_catalog_products', JSON.stringify(merged));
+              return merged;
+            }
+          }
+        }
+        localStorage.setItem('amrr_catalog_products', JSON.stringify(INITIAL_PRODUCTS));
+        return INITIAL_PRODUCTS;
+      }
+
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
