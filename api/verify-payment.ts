@@ -10,12 +10,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader(
     'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, x-razorpay-signature'
   );
 
   if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+    return res.status(200).end();
   }
 
   if (req.method !== 'POST') {
@@ -23,6 +22,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    const cleanEnv = (val?: string) => val ? val.trim().replace(/^["'\s]+|["'\s]+$/g, '') : '';
+    const key_secret = cleanEnv(process.env.RAZORPAY_KEY_SECRET) || "JgXAEuobCbjHzEt114YBy75o";
+    const webhook_secret = cleanEnv(process.env.RAZORPAY_WEBHOOK_SECRET) || key_secret;
+
+    // 1. RAZORPAY WEBHOOK HANDLING
+    const webhookSignature = (req.headers['x-razorpay-signature'] as string) || '';
+    if (webhookSignature) {
+      const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+      const expectedWebhookSig = crypto
+        .createHmac('sha256', webhook_secret)
+        .update(rawBody)
+        .digest('hex');
+
+      if (expectedWebhookSig !== webhookSignature) {
+        console.warn('Razorpay webhook signature mismatch');
+        return res.status(400).json({ success: false, error: 'Invalid Razorpay webhook signature' });
+      }
+
+      const event = req.body?.event || 'unknown';
+      console.log(`Razorpay webhook verified successfully: ${event}`);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Webhook verified and processed successfully',
+        event
+      });
+    }
+
+    // 2. CLIENT PAYMENT SIGNATURE VERIFICATION
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body || {};
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
@@ -32,8 +60,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const cleanEnv = (val?: string) => val ? val.trim().replace(/^["'\s]+|["'\s]+$/g, '') : '';
-    const key_secret = cleanEnv(process.env.RAZORPAY_KEY_SECRET) || "JgXAEuobCbjHzEt114YBy75o";
     if (!key_secret) {
       return res.status(500).json({ 
         success: false, 
@@ -67,4 +93,3 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ success: false, error: error?.message || "Signature verification failed" });
   }
 }
-

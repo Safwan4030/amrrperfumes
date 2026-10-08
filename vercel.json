@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "rewrites": [
+    { "source": "/api/send-order-email", "destination": "/api/send-email?type=order" },
+    { "source": "/api/send-otp-email", "destination": "/api/send-email?type=otp" },
+    { "source": "/api/accounts/summary", "destination": "/api/accounts?action=summary" },
+    { "source": "/api/accounts/refund", "destination": "/api/accounts?action=refund" },
+    { "source": "/api/delhivery/([a-zA-Z0-9_-]+)", "destination": "/api/delhivery?action=$1" },
+    { "source": "/((?!api/.*).*)", "destination": "/index.html" }
+  ]
+}
