@@ -23,13 +23,20 @@ export const SearchModal: React.FC<SearchModalProps> = ({
 
   if (!isOpen) return null;
 
-  const filtered = products.filter(p => 
-    p.name.toLowerCase().includes(query.toLowerCase()) ||
-    p.family.toLowerCase().includes(query.toLowerCase()) ||
-    p.category.toLowerCase().includes(query.toLowerCase()) ||
-    p.notes.top.some(n => n.toLowerCase().includes(query.toLowerCase())) ||
-    p.notes.base.some(n => n.toLowerCase().includes(query.toLowerCase()))
-  );
+  const filtered = products.filter(p => {
+    const q = query.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      (p.name && p.name.toLowerCase().includes(q)) ||
+      (p.family && p.family.toLowerCase().includes(q)) ||
+      (p.category && p.category.toLowerCase().includes(q)) ||
+      (p.subtitle && p.subtitle.toLowerCase().includes(q)) ||
+      (p.shortDescription && p.shortDescription.toLowerCase().includes(q)) ||
+      (p.notes?.top && Array.isArray(p.notes.top) && p.notes.top.some(n => n.toLowerCase().includes(q))) ||
+      (p.notes?.heart && Array.isArray(p.notes.heart) && p.notes.heart.some(n => n.toLowerCase().includes(q))) ||
+      (p.notes?.base && Array.isArray(p.notes.base) && p.notes.base.some(n => n.toLowerCase().includes(q)))
+    );
+  });
 
   return (
     <AnimatePresence>

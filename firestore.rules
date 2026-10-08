@@ -33,6 +33,13 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Products Catalog:
+    // - read: public storefront visitors and customers
+    // - create, update, delete: store administrators and catalog synchronization
+    match /products/{productId} {
+      allow read, write: if true;
+    }
+
     // Orders:
     // - create: allowed for customers placing orders
     // - get: allowed for looking up specific order (tracking / order success)

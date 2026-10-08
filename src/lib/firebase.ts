@@ -33,8 +33,10 @@ import {
   FinancialAccount,
   AccountingTransaction,
   ExpenseItem,
-  AccountTransfer 
+  AccountTransfer,
+  Product 
 } from '../types';
+import { INITIAL_PRODUCTS } from '../data/products';
 
 // Import Firebase config auto-generated during setup
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -1319,6 +1321,229 @@ export async function syncAllOrdersToAccounting(orders: Order[]): Promise<void> 
     if (o.status !== 'Cancelled' && o.totalAmount > 0) {
       await recordOrderSaleInAccounting(o);
     }
+  }
+}
+
+// -------------------------------------------------------------
+// Realtime Products Catalog Management
+// -------------------------------------------------------------
+
+export function subscribeToProducts(callback: (products: Product[]) => void): () => void {
+  try {
+    const productsRef = collection(db, 'products');
+    const unsubscribe = onSnapshot(productsRef, async (snapshot) => {
+      if (snapshot.empty) {
+        // First-time initialization: seed all 9 perfumes into Firestore
+        console.log('[Firestore] Products collection empty. Seeding INITIAL_PRODUCTS catalog...');
+        try {
+          for (const p of INITIAL_PRODUCTS) {
+            await setDoc(doc(db, 'products', p.id), {
+              ...p,
+              isPublished: p.isPublished !== false,
+              isActive: p.isActive !== false,
+              updatedAt: new Date().toISOString()
+            }, { merge: true });
+          }
+        } catch (seedErr) {
+          console.warn('[Firestore] Auto-seed warning:', seedErr);
+        }
+        callback(INITIAL_PRODUCTS);
+        return;
+      }
+
+      // Ensure any newly added initial products that aren't yet in Firestore get synced
+      const existingDocIds = new Set(snapshot.docs.map(d => d.id));
+      for (const p of INITIAL_PRODUCTS) {
+        if (!existingDocIds.has(p.id)) {
+          console.log(`[Firestore] Syncing initial product into Firestore: ${p.id}`);
+          setDoc(doc(db, 'products', p.id), {
+            ...p,
+            isPublished: p.isPublished !== false,
+            isActive: p.isActive !== false,
+            updatedAt: new Date().toISOString()
+          }, { merge: true }).catch(err => console.warn('Sync error:', err));
+        }
+      }
+
+      const initialMap = new Map(INITIAL_PRODUCTS.map(p => [p.id, p]));
+      const firestoreProducts: Product[] = snapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        const defaultProd = initialMap.get(docSnap.id);
+
+        const resolveImage = (imgUrl?: string, fallbackUrl?: string) => {
+          if (!imgUrl) return fallbackUrl || '';
+          if (imgUrl.startsWith('data:') || imgUrl.startsWith('http://') || imgUrl.startsWith('https://')) {
+            return imgUrl;
+          }
+          if (imgUrl.startsWith('/src/assets/images/')) {
+            return fallbackUrl || imgUrl.replace('/src/assets/images/', '/images/');
+          }
+          return imgUrl;
+        };
+
+        const resolvedMainImage = resolveImage(data.image, defaultProd?.image);
+        const resolvedGallery = Array.isArray(data.gallery) && data.gallery.length > 0
+          ? data.gallery.map((g: string) => resolveImage(g, defaultProd?.image))
+          : (resolvedMainImage ? [resolvedMainImage] : (defaultProd?.gallery || []));
+
+        return {
+          ...defaultProd,
+          ...data,
+          id: docSnap.id,
+          name: data.name ?? defaultProd?.name ?? '',
+          subtitle: data.subtitle ?? defaultProd?.subtitle ?? '',
+          category: data.category ?? defaultProd?.category ?? 'Extrait de Parfum',
+          family: data.family ?? defaultProd?.family ?? 'Woody Oud',
+          price50ml: typeof data.price50ml === 'number' ? data.price50ml : (defaultProd?.price50ml ?? 999),
+          originalPrice50ml: data.originalPrice50ml !== undefined ? data.originalPrice50ml : defaultProd?.originalPrice50ml,
+          costPrice: data.costPrice !== undefined ? data.costPrice : defaultProd?.costPrice,
+          availableSizes: data.availableSizes ?? defaultProd?.availableSizes ?? ['50 ml'],
+          rating: data.rating ?? defaultProd?.rating ?? 5.0,
+          reviewCount: data.reviewCount ?? defaultProd?.reviewCount ?? 14,
+          inStock: typeof data.inStock === 'boolean' ? data.inStock : (typeof data.stockQuantity === 'number' ? data.stockQuantity > 0 : true),
+          stockQuantity: typeof data.stockQuantity === 'number' ? data.stockQuantity : (defaultProd?.stockQuantity ?? 15),
+          isBestSeller: Boolean(data.isBestSeller),
+          isNewArrival: Boolean(data.isNewArrival),
+          isLimitedEdition: Boolean(data.isLimitedEdition),
+          isPublished: data.isPublished !== false && data.isActive !== false,
+          isActive: data.isActive !== false && data.isPublished !== false,
+          shortDescription: data.shortDescription ?? defaultProd?.shortDescription ?? '',
+          story: data.story ?? defaultProd?.story ?? '',
+          notes: data.notes ?? defaultProd?.notes ?? { top: [], heart: [], base: [] },
+          longevity: typeof data.longevity === 'number' ? data.longevity : (defaultProd?.longevity ?? 5),
+          projection: typeof data.projection === 'number' ? data.projection : (defaultProd?.projection ?? 4),
+          sillage: data.sillage ?? defaultProd?.sillage ?? 'Enveloping',
+          gender: data.gender ?? defaultProd?.gender ?? 'Unisex',
+          season: data.season ?? defaultProd?.season ?? ['All Seasons'],
+          occasion: data.occasion ?? defaultProd?.occasion ?? ['Signature Daily'],
+          concentration: data.concentration ?? defaultProd?.concentration ?? 'Extrait de Parfum',
+          ingredients: data.ingredients ?? defaultProd?.ingredients ?? 'Alcohol Denat., Parfum (Fragrance), Aqua (Water).',
+          sku: data.sku ?? defaultProd?.sku ?? '',
+          tags: data.tags ?? defaultProd?.tags ?? [],
+          reviews: data.reviews ?? defaultProd?.reviews ?? [],
+          image: resolvedMainImage,
+          gallery: resolvedGallery
+        } as Product;
+      });
+
+      // Update local storage backup strictly as a mirror of Firestore
+      try {
+        localStorage.setItem('amrr_firestore_products_cache', JSON.stringify(firestoreProducts));
+      } catch {}
+
+      callback(firestoreProducts);
+    }, (error) => {
+      console.warn('[Firestore] Error subscribing to products:', error);
+      callback(INITIAL_PRODUCTS);
+    });
+
+    return unsubscribe;
+  } catch (err) {
+    console.error('[Firestore] subscribeToProducts initialization failed:', err);
+    callback(INITIAL_PRODUCTS);
+    return () => {};
+  }
+}
+
+export async function fetchProductsOnce(): Promise<Product[]> {
+  try {
+    const productsRef = collection(db, 'products');
+    const snapshot = await getDocs(productsRef);
+    if (snapshot.empty) return INITIAL_PRODUCTS;
+    const initialMap = new Map(INITIAL_PRODUCTS.map(p => [p.id, p]));
+    return snapshot.docs.map(docSnap => {
+      const data = docSnap.data();
+      const defaultProd = initialMap.get(docSnap.id);
+      const resolveImage = (imgUrl?: string, fallbackUrl?: string) => {
+        if (!imgUrl) return fallbackUrl || '';
+        if (imgUrl.startsWith('data:') || imgUrl.startsWith('http://') || imgUrl.startsWith('https://')) return imgUrl;
+        if (imgUrl.startsWith('/src/assets/images/')) return fallbackUrl || imgUrl.replace('/src/assets/images/', '/images/');
+        return imgUrl;
+      };
+      const resolvedMainImage = resolveImage(data.image, defaultProd?.image);
+      const resolvedGallery = Array.isArray(data.gallery) && data.gallery.length > 0
+        ? data.gallery.map((g: string) => resolveImage(g, defaultProd?.image))
+        : (resolvedMainImage ? [resolvedMainImage] : (defaultProd?.gallery || []));
+      return {
+        ...defaultProd,
+        ...data,
+        id: docSnap.id,
+        name: data.name ?? defaultProd?.name ?? '',
+        subtitle: data.subtitle ?? defaultProd?.subtitle ?? '',
+        category: data.category ?? defaultProd?.category ?? 'Extrait de Parfum',
+        family: data.family ?? defaultProd?.family ?? 'Woody Oud',
+        price50ml: typeof data.price50ml === 'number' ? data.price50ml : (defaultProd?.price50ml ?? 999),
+        originalPrice50ml: data.originalPrice50ml !== undefined ? data.originalPrice50ml : defaultProd?.originalPrice50ml,
+        costPrice: data.costPrice !== undefined ? data.costPrice : defaultProd?.costPrice,
+        availableSizes: data.availableSizes ?? defaultProd?.availableSizes ?? ['50 ml'],
+        rating: data.rating ?? defaultProd?.rating ?? 5.0,
+        reviewCount: data.reviewCount ?? defaultProd?.reviewCount ?? 14,
+        inStock: typeof data.inStock === 'boolean' ? data.inStock : (typeof data.stockQuantity === 'number' ? data.stockQuantity > 0 : true),
+        stockQuantity: typeof data.stockQuantity === 'number' ? data.stockQuantity : (defaultProd?.stockQuantity ?? 15),
+        isBestSeller: Boolean(data.isBestSeller),
+        isNewArrival: Boolean(data.isNewArrival),
+        isLimitedEdition: Boolean(data.isLimitedEdition),
+        isPublished: data.isPublished !== false && data.isActive !== false,
+        isActive: data.isActive !== false && data.isPublished !== false,
+        shortDescription: data.shortDescription ?? defaultProd?.shortDescription ?? '',
+        story: data.story ?? defaultProd?.story ?? '',
+        notes: data.notes ?? defaultProd?.notes ?? { top: [], heart: [], base: [] },
+        longevity: typeof data.longevity === 'number' ? data.longevity : (defaultProd?.longevity ?? 5),
+        projection: typeof data.projection === 'number' ? data.projection : (defaultProd?.projection ?? 4),
+        sillage: data.sillage ?? defaultProd?.sillage ?? 'Enveloping',
+        gender: data.gender ?? defaultProd?.gender ?? 'Unisex',
+        season: data.season ?? defaultProd?.season ?? ['All Seasons'],
+        occasion: data.occasion ?? defaultProd?.occasion ?? ['Signature Daily'],
+        concentration: data.concentration ?? defaultProd?.concentration ?? 'Extrait de Parfum',
+        ingredients: data.ingredients ?? defaultProd?.ingredients ?? 'Alcohol Denat., Parfum (Fragrance), Aqua (Water).',
+        sku: data.sku ?? defaultProd?.sku ?? '',
+        tags: data.tags ?? defaultProd?.tags ?? [],
+        reviews: data.reviews ?? defaultProd?.reviews ?? [],
+        image: resolvedMainImage,
+        gallery: resolvedGallery
+      } as Product;
+    });
+  } catch (err) {
+    console.warn('[Firestore] fetchProductsOnce fallback:', err);
+    return INITIAL_PRODUCTS;
+  }
+}
+
+export async function saveProductToFirestore(product: Product): Promise<void> {
+  try {
+    const productRef = doc(db, 'products', product.id);
+    await setDoc(productRef, {
+      ...product,
+      isPublished: product.isPublished !== false,
+      isActive: product.isActive !== false,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+    console.log('[Firestore] Product saved successfully:', product.id, product.name);
+  } catch (err) {
+    console.error('[Firestore] Error saving product:', err);
+  }
+}
+
+export async function deleteProductFromFirestore(productId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'products', productId));
+    console.log('[Firestore] Product deleted:', productId);
+  } catch (err) {
+    console.error('[Firestore] Error deleting product:', err);
+  }
+}
+
+export async function toggleProductPublishStatus(productId: string, isPublished: boolean): Promise<void> {
+  try {
+    const productRef = doc(db, 'products', productId);
+    await updateDoc(productRef, {
+      isPublished,
+      isActive: isPublished,
+      updatedAt: new Date().toISOString()
+    });
+    console.log(`[Firestore] Product ${productId} publish status changed to: ${isPublished}`);
+  } catch (err) {
+    console.error('[Firestore] Error updating product publish status:', err);
   }
 }
 

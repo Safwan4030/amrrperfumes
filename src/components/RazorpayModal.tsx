@@ -269,6 +269,12 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
         amount: totalAmount,
         currency: 'INR',
         receipt: generateOrderId(),
+        items: cartItems.map(item => ({
+          productId: item.product.id,
+          quantity: item.quantity,
+          selectedSize: item.selectedSize
+        })),
+        couponCode: couponCode || undefined,
         notes: {
           customer_email: shipping.email,
           customer_name: shipping.fullName

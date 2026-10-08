@@ -3,6 +3,12 @@ export interface CreateOrderParams {
   currency?: string;
   receipt?: string;
   notes?: Record<string, string>;
+  items?: Array<{
+    productId: string;
+    quantity: number;
+    selectedSize?: string;
+  }>;
+  couponCode?: string;
 }
 
 export interface VerifyPaymentParams {

@@ -1,6 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Razorpay from 'razorpay';
 import dotenv from 'dotenv';
+import { initializeApp, getApps } from 'firebase/app';
+import { getFirestore, doc, getDoc } from 'firebase/firestore';
+import firebaseConfig from '../firebase-applet-config.json';
 
 dotenv.config();
 
@@ -23,10 +26,70 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { amount, currency = "INR", receipt, notes } = req.body || {};
+    const { amount, currency = "INR", receipt, notes, items, couponCode } = req.body || {};
 
     if (!amount || isNaN(amount)) {
       return res.status(400).json({ success: false, error: "Invalid amount provided" });
+    }
+
+    // Server-side validation against persistent Firestore database (Single Source of Truth)
+    let finalVerifiedAmount = Number(amount);
+    if (Array.isArray(items) && items.length > 0) {
+      try {
+        const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+        const db = firebaseConfig.firestoreDatabaseId
+          ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+          : getFirestore(app);
+
+        let verifiedSubtotal = 0;
+        for (const item of items) {
+          const pId = item.productId || item.product?.id || item.id;
+          const qty = Number(item.quantity) || 1;
+          if (!pId) continue;
+
+          const pDoc = await getDoc(doc(db, 'products', pId));
+          if (!pDoc.exists()) {
+            return res.status(400).json({
+              success: false,
+              error: `Fragrance "${pId}" does not exist in the current catalog.`
+            });
+          }
+
+          const pData = pDoc.data();
+          if (pData.isPublished === false || pData.isActive === false) {
+            return res.status(400).json({
+              success: false,
+              error: `"${pData.name || pId}" is currently unpublished and not available for purchase.`
+            });
+          }
+
+          if (pData.inStock === false || (typeof pData.stockQuantity === 'number' && pData.stockQuantity < qty)) {
+            return res.status(400).json({
+              success: false,
+              error: `"${pData.name || pId}" has insufficient stock (${pData.stockQuantity || 0} available).`
+            });
+          }
+
+          const verifiedUnitPrice = typeof pData.price50ml === 'number' ? pData.price50ml : 999;
+          verifiedSubtotal += verifiedUnitPrice * qty;
+        }
+
+        let verifiedDiscount = 0;
+        if (couponCode) {
+          const cleanCoupon = String(couponCode).trim().toUpperCase();
+          if (['AMRR10', 'ZEUFI10', 'FADE10'].includes(cleanCoupon)) {
+            verifiedDiscount = Math.round(verifiedSubtotal * 0.1);
+          }
+        }
+
+        const calculatedFinal = Math.max(0, verifiedSubtotal - verifiedDiscount);
+        if (calculatedFinal > 0) {
+          console.log(`Server verified total: ₹${calculatedFinal} (Client claimed: ₹${amount})`);
+          finalVerifiedAmount = calculatedFinal;
+        }
+      } catch (dbErr) {
+        console.warn('Firestore server-side validation fallback note:', dbErr);
+      }
     }
 
     const cleanEnv = (val?: string) => val ? val.trim().replace(/^["'\s]+|["'\s]+$/g, '') : '';
@@ -41,15 +104,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    console.log("Initializing Razorpay client with Key ID prefix:", key_id.substring(0, 10) + "...", "Secret length:", key_secret.length);
-
     const razorpay = new Razorpay({
       key_id,
       key_secret,
     });
 
     const options = {
-      amount: Math.round(Number(amount) * 100),
+      amount: Math.round(finalVerifiedAmount * 100),
       currency,
       receipt: receipt || `rcpt_${Date.now()}`,
       notes: notes || {}

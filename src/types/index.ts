@@ -38,6 +38,14 @@ export interface Product {
   isBestSeller?: boolean;
   isNewArrival?: boolean;
   isLimitedEdition?: boolean;
+  isPublished?: boolean;
+  isActive?: boolean;
+  sku?: string;
+  tags?: string[];
+  discount?: number;
+  variants?: any[];
+  customFields?: Record<string, any>;
+  updatedAt?: string;
   image: string;
   gallery: string[];
   notes: FragranceNotes;

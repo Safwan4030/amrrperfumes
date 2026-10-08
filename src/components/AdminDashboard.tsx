@@ -85,6 +85,7 @@ interface AdminDashboardProps {
   onUpdateProduct: (updated: Product) => void;
   onAddProduct?: (newProduct: Product) => void;
   onDeleteProduct?: (productId: string) => void;
+  onTogglePublish?: (productId: string, isPublished: boolean) => void;
   onUpdateOrder?: (updated: Order) => void;
 }
 
@@ -100,6 +101,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onUpdateProduct,
   onAddProduct,
   onDeleteProduct,
+  onTogglePublish,
   onUpdateOrder
 }) => {
   const ADMIN_EMAILS = ['amrrperfumes@gmail.com', 'amrrparfumes@gmail.com', 'safwaanvv@gmail.com'];
@@ -169,9 +171,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     costPrice: undefined as number | undefined,
     stockQuantity: 20,
     inStock: true,
+    sku: '',
+    tags: '',
     shortDescription: 'Exquisite artisanal formulation crafted with rare botanical essences.',
     story: 'Distilled with high-concentration French botanicals and warm aged woods, creating an unmistakable trail.',
     image: '',
+    galleryUrls: '',
     topNotes: 'Calabrian Bergamot, Pink Pepper',
     heartNotes: 'Taif Rose, White Suede',
     baseNotes: 'Wild Agarwood, Bourbon Vanilla, Amber',
@@ -182,6 +187,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     isBestSeller: false,
     isNewArrival: false,
     isLimitedEdition: false,
+    isPublished: true,
     concentration: 'Extrait de Parfum',
     ingredients: 'Alcohol Denat., Parfum (Fragrance), Aqua (Water), Limonene, Linalool.'
   });
@@ -301,6 +307,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       isBestSeller: false,
       isNewArrival: true,
       isLimitedEdition: false,
+      isPublished: true,
       concentration: 'Extrait de Parfum',
       ingredients: 'Alcohol Denat., Parfum (Fragrance), Aqua (Water), Limonene, Linalool.'
     });
@@ -327,9 +334,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       costPrice: p.costPrice,
       stockQuantity: p.stockQuantity ?? 15,
       inStock: p.inStock ?? true,
+      sku: p.sku || '',
+      tags: p.tags?.join(', ') || '',
       shortDescription: p.shortDescription || '',
       story: p.story || '',
       image: p.image || PRESET_IMAGES[0]?.url || '',
+      galleryUrls: p.gallery && Array.isArray(p.gallery) ? p.gallery.join(', ') : '',
       topNotes: p.notes?.top?.join(', ') || '',
       heartNotes: p.notes?.heart?.join(', ') || '',
       baseNotes: p.notes?.base?.join(', ') || '',
@@ -340,6 +350,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       isBestSeller: !!p.isBestSeller,
       isNewArrival: !!p.isNewArrival,
       isLimitedEdition: !!p.isLimitedEdition,
+      isPublished: p.isPublished !== false,
       concentration: p.concentration || p.category,
       ingredients: p.ingredients || 'Alcohol Denat., Parfum (Fragrance), Aqua (Water).'
     });
@@ -392,7 +403,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     const existing = products.find(p => p.id === productId);
 
+    const parsedGallery = formState.galleryUrls
+      ? formState.galleryUrls.split(',').map(s => s.trim()).filter(Boolean)
+      : (existing?.gallery || [formState.image || PRESET_IMAGES[0]?.url]);
+    if (formState.image && !parsedGallery.includes(formState.image)) {
+      parsedGallery.unshift(formState.image);
+    }
+
+    const parsedTags = formState.tags
+      ? formState.tags.split(',').map(s => s.trim()).filter(Boolean)
+      : (existing?.tags || []);
+
     const productPayload: Product = {
+      ...existing,
       id: productId,
       name: formState.name.trim(),
       subtitle: formState.subtitle.trim() || `${effectiveCategory} (50 ml)`,
@@ -404,10 +427,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       availableSizes: ['50 ml'],
       stockQuantity: Number(formState.stockQuantity),
       inStock: Boolean(formState.inStock && Number(formState.stockQuantity) > 0),
+      sku: formState.sku.trim() || undefined,
+      tags: parsedTags,
       shortDescription: formState.shortDescription.trim() || `Luxurious artisanal formulation crafted by AMRR Perfumes.`,
       story: formState.story.trim() || `Crafted with meticulous attention to detail, featuring high-concentration French botanicals and artisanal aged resins.`,
       image: formState.image || existing?.image || PRESET_IMAGES[0]?.url,
-      gallery: [formState.image || existing?.image || PRESET_IMAGES[0]?.url],
+      gallery: parsedGallery.length > 0 ? parsedGallery : [formState.image || PRESET_IMAGES[0]?.url],
       notes: {
         top: parseNotes(formState.topNotes),
         heart: parseNotes(formState.heartNotes),
@@ -426,7 +451,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       reviews: existing?.reviews || [],
       isBestSeller: formState.isBestSeller,
       isNewArrival: formState.isNewArrival,
-      isLimitedEdition: formState.isLimitedEdition
+      isLimitedEdition: formState.isLimitedEdition,
+      isPublished: formState.isPublished,
+      isActive: formState.isPublished,
+      updatedAt: new Date().toISOString()
     };
 
     if (productModalMode === 'add') {
@@ -1101,6 +1129,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       Total Fragrances: <strong className="text-black">{products.length}</strong>
                     </span>
                     <span className="px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-800 font-semibold border border-emerald-200">
+                      Live on Store: <strong className="text-emerald-950">{products.filter(p => p.isPublished !== false).length}</strong>
+                    </span>
+                    <span className="px-2.5 py-1 rounded-md bg-gray-50 text-gray-700 font-semibold border border-gray-200">
+                      Hidden / Draft: <strong className="text-gray-900">{products.filter(p => p.isPublished === false).length}</strong>
+                    </span>
+                    <span className="px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-800 font-semibold border border-emerald-200">
                       In Stock: <strong className="text-emerald-950">{products.filter(p => p.stockQuantity > 0).length}</strong>
                     </span>
                     <span className="px-2.5 py-1 rounded-md bg-amber-50 text-amber-800 font-semibold border border-amber-200">
@@ -1117,6 +1151,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <th className="p-3">Category &amp; Accord</th>
                           <th className="p-3">50ml Price</th>
                           <th className="p-3">Inventory Stock</th>
+                          <th className="p-3">Storefront Status</th>
                           <th className="p-3">Actions</th>
                         </tr>
                       </thead>
@@ -1200,6 +1235,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   <span className={`w-1.5 h-1.5 rounded-full ${p.stockQuantity <= 0 ? 'bg-red-600' : p.stockQuantity < 10 ? 'bg-amber-600' : 'bg-emerald-600'}`} />
                                   {p.stockQuantity > 0 ? `${p.stockQuantity} in stock` : 'Out of Stock'}
                                 </span>
+                              </td>
+
+                              <td className="p-3 align-middle">
+                                <div className="flex items-center gap-2">
+                                  {p.isPublished !== false ? (
+                                    <>
+                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                        Live on Store
+                                      </span>
+                                      <button
+                                        onClick={() => onTogglePublish?.(p.id, false)}
+                                        title="Hide this fragrance from the public storefront"
+                                        className="text-[10px] text-gray-500 hover:text-black font-semibold underline cursor-pointer"
+                                      >
+                                        Hide
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-gray-200 text-gray-700 border border-gray-300">
+                                        Hidden / Draft
+                                      </span>
+                                      <button
+                                        onClick={() => onTogglePublish?.(p.id, true)}
+                                        title="Make this fragrance visible on the public storefront"
+                                        className="text-[10px] text-emerald-700 hover:text-emerald-900 font-bold underline cursor-pointer"
+                                      >
+                                        Publish
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
                               </td>
 
                               <td className="p-3 align-middle">
@@ -1995,6 +2062,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                   {/* Badges & In Stock Toggle */}
                   <div className="pt-2 border-t border-gray-200 flex flex-wrap items-center gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer font-bold text-emerald-950 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
+                      <input
+                        type="checkbox"
+                        checked={formState.isPublished}
+                        onChange={(e) => setFormState(prev => ({ ...prev, isPublished: e.target.checked }))}
+                        className="w-4 h-4 text-emerald-600 rounded border-emerald-300 focus:ring-emerald-600 cursor-pointer"
+                      />
+                      <span>Visible on Storefront (Published)</span>
+                    </label>
+
                     <label className="flex items-center gap-2 cursor-pointer font-bold text-black">
                       <input
                         type="checkbox"
@@ -2141,6 +2218,73 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <option value="Subtle">Subtle</option>
                       </select>
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                      Full Olfactory Story &amp; Heritage Description
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={formState.story}
+                      onChange={(e) => setFormState(prev => ({ ...prev, story: e.target.value }))}
+                      placeholder="Detailed fragrance inspiration and background story..."
+                      className="w-full p-2 bg-white border border-gray-300 rounded-lg text-black outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                      Ingredients &amp; Botanical Formulation
+                    </label>
+                    <input
+                      type="text"
+                      value={formState.ingredients}
+                      onChange={(e) => setFormState(prev => ({ ...prev, ingredients: e.target.value }))}
+                      placeholder="e.g. Alcohol Denat., Parfum (Fragrance), Aqua (Water)..."
+                      className="w-full p-2 bg-white border border-gray-300 rounded-lg text-black outline-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                        Inventory SKU / Product Code
+                      </label>
+                      <input
+                        type="text"
+                        value={formState.sku}
+                        onChange={(e) => setFormState(prev => ({ ...prev, sku: e.target.value }))}
+                        placeholder="e.g. AMRR-KHL-50"
+                        className="w-full p-2 bg-white border border-gray-300 rounded-lg text-black outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                        Product Search Tags <span className="text-gray-400 font-normal">(Comma separated)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={formState.tags}
+                        onChange={(e) => setFormState(prev => ({ ...prev, tags: e.target.value }))}
+                        placeholder="e.g. luxury, oud, bestseller, gift"
+                        className="w-full p-2 bg-white border border-gray-300 rounded-lg text-black outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                      Additional Gallery Image URLs <span className="text-gray-400 font-normal">(Comma separated)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formState.galleryUrls}
+                      onChange={(e) => setFormState(prev => ({ ...prev, galleryUrls: e.target.value }))}
+                      placeholder="https://example.com/gallery1.jpg, https://example.com/gallery2.jpg"
+                      className="w-full p-2 bg-white border border-gray-300 rounded-lg text-black outline-none"
+                    />
                   </div>
                 </div>
 

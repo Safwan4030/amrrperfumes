@@ -36,6 +36,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
   const selectedSize: BottleSize = '50 ml';
   const currentPrice = product.price50ml;
+  const isAvailable = product.inStock !== false && product.stockQuantity > 0;
 
   return (
     <AnimatePresence>
@@ -100,7 +101,15 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   <div className="flex items-center gap-2 text-xs font-bold text-gray-600 uppercase tracking-widest mb-1">
                     <span>{product.family}</span>
                     <span>•</span>
-                    <span className="text-black font-semibold">In Stock</span>
+                    {isAvailable ? (
+                      <span className="text-emerald-700 font-semibold">
+                        In Stock ({product.stockQuantity} available)
+                      </span>
+                    ) : (
+                      <span className="text-red-600 font-semibold">
+                        Out of Stock
+                      </span>
+                    )}
                   </div>
                   <h2 className="text-3xl sm:text-4xl font-extrabold text-black">
                     {product.name}
@@ -147,25 +156,37 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               <div className="pt-4 border-t border-gray-200 space-y-2">
                 <div className="grid grid-cols-2 gap-3">
                   <button
+                    disabled={!isAvailable}
                     onClick={() => {
+                      if (!isAvailable) return;
                       onAddToCart(product, selectedSize, quantity);
                       onClose();
                     }}
-                    className="py-3 px-4 rounded-xl border border-black text-black font-bold text-xs uppercase tracking-wider hover:bg-black hover:text-white transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className={`py-3 px-4 rounded-xl border font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                      isAvailable
+                        ? 'border-black text-black hover:bg-black hover:text-white cursor-pointer'
+                        : 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
+                    }`}
                   >
                     <ShoppingBag className="w-4 h-4" />
-                    Add To Cart
+                    {isAvailable ? 'Add To Cart' : 'Sold Out'}
                   </button>
 
                   <button
+                    disabled={!isAvailable}
                     onClick={() => {
+                      if (!isAvailable) return;
                       onBuyNow(product, selectedSize, quantity);
                       onClose();
                     }}
-                    className="py-3 px-4 rounded-xl bg-black text-white font-bold text-xs uppercase tracking-wider hover:bg-gray-800 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                    className={`py-3 px-4 rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 ${
+                      isAvailable
+                        ? 'bg-black text-white hover:bg-gray-800 cursor-pointer'
+                        : 'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none'
+                    }`}
                   >
                     <Zap className="w-4 h-4 fill-current" />
-                    Buy Now
+                    {isAvailable ? 'Buy Now' : 'Out of Stock'}
                   </button>
                 </div>
               </div>
