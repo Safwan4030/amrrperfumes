@@ -26,41 +26,43 @@ import {
   logoutFirebase,
   recordSiteVisit,
   saveCustomerLead,
-  syncExistingOrdersToCustomerLeads,
-  subscribeToProducts,
-  fetchProductsOnce,
-  saveProductToFirestore,
-  deleteProductFromFirestore,
-  toggleProductPublishStatus
+  syncExistingOrdersToCustomerLeads 
 } from './lib/firebase';
 
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
-  
-  // Single Source of Truth: Products loaded directly from persistent Firestore
   const [products, setProducts] = useState<Product[]>(() => {
     try {
-      // Purge any stale legacy localStorage keys
-      localStorage.removeItem('amrr_catalog_products');
-      localStorage.removeItem('amrr_catalog_version');
-
-      // Check fast local mirror of Firestore for instant first-frame render
-      const cached = localStorage.getItem('amrr_firestore_products_cache');
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        // Ensure stale cache with fewer items is discarded in favor of INITIAL_PRODUCTS
-        if (Array.isArray(parsed) && parsed.length >= INITIAL_PRODUCTS.length) {
-          return parsed;
+      const saved = localStorage.getItem('amrr_catalog_products');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((p: any) =>
+            !p.category || p.category.toLowerCase().includes('parfum')
+              ? {
+                  ...p,
+                  category: 'Extrait de Parfum',
+                  concentration: 'Extrait de Parfum',
+                  subtitle: p.subtitle ? p.subtitle.replace(/Eau de Parfum/gi, 'Extrait de Parfum') : 'Extrait de Parfum (50 ml)'
+                }
+              : p
+          );
         }
       }
     } catch (e) {
-      console.warn('Cache mirror read note:', e);
+      console.warn('Failed to load custom products from localStorage', e);
     }
     return INITIAL_PRODUCTS;
   });
-
   const [currency, setCurrency] = useState<Currency>('INR');
   const [activeCategory, setActiveCategory] = useState<string>('all');
+
+  // Keep catalog synced in localStorage for permanent persistence
+  useEffect(() => {
+    try {
+      localStorage.setItem('amrr_catalog_products', JSON.stringify(products));
+    } catch (e) {}
+  }, [products]);
 
   // Customer Account & Compulsory Email Login State
   const [currentUser, setCurrentUser] = useState<{ email: string; name: string; phone?: string; uid?: string } | null>(() => {
@@ -99,20 +101,6 @@ export default function App() {
     } catch {}
   }, [wishlistIds]);
 
-  // Synchronize cart items with latest product prices, stock, and details from database
-  useEffect(() => {
-    if (cartItems.length === 0 || products.length === 0) return;
-    setCartItems(prev => prev.map(item => {
-      const current = products.find(p => p.id === item.product.id);
-      if (!current) return item;
-      return {
-        ...item,
-        product: current,
-        unitPrice: current.price50ml
-      };
-    }));
-  }, [products]);
-
   // Orders & Saved Customer Info
   const [orders, setOrders] = useState<Order[]>([]);
   const [savedShipping, setSavedShipping] = useState<ShippingDetails | null>(() => {
@@ -140,24 +128,6 @@ export default function App() {
   // Track site visits for Admin analytics
   useEffect(() => {
     recordSiteVisit();
-  }, []);
-
-  // Listen to Firestore real-time products catalog (Single Source of Truth)
-  useEffect(() => {
-    // Immediate direct query for instant synchronization
-    fetchProductsOnce().then((initialDbProducts) => {
-      if (Array.isArray(initialDbProducts) && initialDbProducts.length > 0) {
-        setProducts(initialDbProducts);
-      }
-    }).catch(() => {});
-
-    // Live continuous snapshot listener for instant admin updates across all devices
-    const unsubProducts = subscribeToProducts((realtimeProducts) => {
-      if (Array.isArray(realtimeProducts) && realtimeProducts.length > 0) {
-        setProducts(realtimeProducts);
-      }
-    });
-    return () => unsubProducts();
   }, []);
 
   // Listen to Firebase Auth state
@@ -277,27 +247,12 @@ export default function App() {
   const [showQuiz, setShowQuiz] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
-  const [adminInitialTab, setAdminInitialTab] = useState<'orders' | 'inventory' | 'customers' | 'accounts' | 'traffic' | 'delhivery-test' | 'inbox' | undefined>(undefined);
 
-  // Quick admin opening via Alt+A shortcut, /admin/accounts route, or #admin URL hash
+  // Quick admin opening via Alt+A shortcut or #admin URL hash
   useEffect(() => {
-    const handleUrlRoute = () => {
-      const path = (window.location.pathname || '').toLowerCase();
-      const hash = (window.location.hash || '').toLowerCase();
-      const search = (window.location.search || '').toLowerCase();
-
-      if (path.includes('/admin/accounts') || hash.includes('accounts')) {
-        setAdminInitialTab('accounts');
-        setShowAdmin(true);
-      } else if (path.startsWith('/admin') || hash.startsWith('#admin') || search.includes('admin=true')) {
-        setShowAdmin(true);
-      }
-    };
-
-    handleUrlRoute();
-    window.addEventListener('popstate', handleUrlRoute);
-    window.addEventListener('hashchange', handleUrlRoute);
-
+    if (window.location.hash === '#admin' || window.location.search.includes('admin=true')) {
+      setShowAdmin(true);
+    }
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.altKey && (e.key === 'a' || e.key === 'A')) || (e.ctrlKey && e.shiftKey && (e.key === 'a' || e.key === 'A'))) {
         e.preventDefault();
@@ -305,11 +260,7 @@ export default function App() {
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('popstate', handleUrlRoute);
-      window.removeEventListener('hashchange', handleUrlRoute);
-    };
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
   
   // Checkout & Payment State
@@ -454,18 +405,15 @@ export default function App() {
 
   const wishlistProducts = products.filter(p => wishlistIds.includes(p.id));
 
-  // Public storefront displays only active, published fragrances
-  const publishedProducts = products.filter(p => p.isPublished !== false && p.isActive !== false);
-
   // Extract all distinct categories from current catalog (excluding core Extrait de Parfum)
-  const distinctCategories: string[] = Array.from(new Set(publishedProducts.map(p => p.category)))
+  const distinctCategories: string[] = Array.from(new Set(products.map(p => p.category)))
     .filter((cat): cat is string => typeof cat === 'string' && cat.length > 0 && cat !== 'Extrait de Parfum' && cat !== 'Eau de Parfum');
 
   const filteredProducts = activeCategory === 'all'
-    ? publishedProducts
+    ? products
     : (activeCategory === 'signature' || activeCategory === 'bestseller')
-      ? publishedProducts.filter(p => p.id.toLowerCase() === 'akoya' || p.name.toLowerCase() === 'akoya' || p.isBestSeller)
-      : publishedProducts.filter(p => p.category.toLowerCase() === activeCategory.toLowerCase());
+      ? products.filter(p => p.id.toLowerCase() === 'akoya' || p.name.toLowerCase() === 'akoya' || p.isBestSeller)
+      : products.filter(p => p.category.toLowerCase() === activeCategory.toLowerCase());
 
   return (
     <div className="min-h-screen bg-white text-black font-sans antialiased selection:bg-black selection:text-white">
@@ -564,23 +512,16 @@ export default function App() {
 
       {/* MODALS */}
       {/* Product Detail Modal */}
-      {(() => {
-        const activeQuickViewProduct = quickViewProduct 
-          ? (products.find(p => p.id === quickViewProduct.id) || quickViewProduct)
-          : null;
-        return (
-          <ProductDetailModal
-            product={activeQuickViewProduct}
-            currency={currency}
-            isWishlisted={activeQuickViewProduct ? wishlistIds.includes(activeQuickViewProduct.id) : false}
-            onClose={() => setQuickViewProduct(null)}
-            onToggleWishlist={toggleWishlist}
-            onAddToCart={handleAddToCart}
-            onBuyNow={handleBuyNow}
-            allProducts={publishedProducts}
-          />
-        );
-      })()}
+      <ProductDetailModal
+        product={quickViewProduct}
+        currency={currency}
+        isWishlisted={quickViewProduct ? wishlistIds.includes(quickViewProduct.id) : false}
+        onClose={() => setQuickViewProduct(null)}
+        onToggleWishlist={toggleWishlist}
+        onAddToCart={handleAddToCart}
+        onBuyNow={handleBuyNow}
+        allProducts={products}
+      />
 
       {/* Slide-out Shopping Cart Drawer */}
       <CartDrawer
@@ -652,7 +593,7 @@ export default function App() {
       <ScentQuizModal
         isOpen={showQuiz}
         onClose={() => setShowQuiz(false)}
-        products={publishedProducts}
+        products={products}
         currency={currency}
         onAddToCart={handleAddToCart}
         onBuyNow={handleBuyNow}
@@ -686,7 +627,7 @@ export default function App() {
       <SearchModal
         isOpen={showSearch}
         onClose={() => setShowSearch(false)}
-        products={publishedProducts}
+        products={products}
         currency={currency}
         onSelectProduct={(p) => setQuickViewProduct(p)}
       />
@@ -699,23 +640,15 @@ export default function App() {
         orders={orders}
         currency={currency}
         currentUserEmail={currentUser?.email}
-        initialTab={adminInitialTab}
         onOpenLogin={() => setShowAccount(true)}
         onUpdateProduct={(updated) => {
           setProducts((prev) => prev.map(p => p.id === updated.id ? updated : p));
-          saveProductToFirestore(updated);
         }}
         onAddProduct={(newProduct) => {
           setProducts((prev) => [newProduct, ...prev.filter(p => p.id !== newProduct.id)]);
-          saveProductToFirestore(newProduct);
         }}
         onDeleteProduct={(productId) => {
           setProducts((prev) => prev.filter(p => p.id !== productId));
-          deleteProductFromFirestore(productId);
-        }}
-        onTogglePublish={(productId, isPublished) => {
-          setProducts((prev) => prev.map(p => p.id === productId ? { ...p, isPublished, isActive: isPublished } : p));
-          toggleProductPublishStatus(productId, isPublished);
         }}
         onUpdateOrder={(updated) => {
           setOrders((prev) => prev.map(o => o.id === updated.id ? updated : o));

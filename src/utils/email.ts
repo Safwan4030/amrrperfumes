@@ -24,12 +24,12 @@ export async function sendOrderConfirmationEmail(order: Order): Promise<EmailDis
   }
 
   try {
-    const response = await fetch('/api/send-email', {
+    const response = await fetch('/api/send-order-email', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ type: 'order', order }),
+      body: JSON.stringify({ order }),
     });
 
     if (!response.ok) {
@@ -70,12 +70,12 @@ export async function sendOtpEmail(email: string, otp: string, name?: string): P
   }
 
   try {
-    const response = await fetch('/api/send-email', {
+    const response = await fetch('/api/send-otp-email', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ type: 'otp', email: cleanEmail, otp, name }),
+      body: JSON.stringify({ email: cleanEmail, otp, name }),
     });
 
     if (!response.ok) {
