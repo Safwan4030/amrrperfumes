@@ -70,9 +70,43 @@
         "lastVisitDate": { "type": "string" },
         "lastVisitAt": { "type": "string" }
       }
+    },
+    "products": {
+      "title": "Products",
+      "description": "Fragrance catalogue, prices, stock, images, and scent details",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "category": { "type": "string" },
+        "family": { "type": "string" },
+        "price50ml": { "type": "number" },
+        "originalPrice50ml": { "type": "number" },
+        "stockQuantity": { "type": "number" },
+        "inStock": { "type": "boolean" },
+        "isPublished": { "type": "boolean" },
+        "shortDescription": { "type": "string" },
+        "story": { "type": "string" },
+        "image": { "type": "string" },
+        "gallery": { "type": "array" },
+        "notes": { "type": "object" },
+        "rating": { "type": "number" },
+        "reviewCount": { "type": "number" },
+        "isBestSeller": { "type": "boolean" },
+        "isNewArrival": { "type": "boolean" },
+        "isLimitedEdition": { "type": "boolean" },
+        "concentration": { "type": "string" },
+        "ingredients": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["name", "price50ml"]
     }
   },
   "firestore": {
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/products" },
+      "description": "Fragrance product records and single source of truth for storefront"
+    },
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/users" },
       "description": "User account profiles"

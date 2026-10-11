@@ -25,7 +25,7 @@ export async function checkPincodeServiceability(
   }
 
   try {
-    const response = await fetch(`/api/delhivery/check-pincode?pincode=${cleanPin}&test=${isTest ? 'true' : 'false'}`);
+    const response = await fetch(`/api/delhivery?action=check-pincode&pincode=${cleanPin}&test=${isTest ? 'true' : 'false'}`);
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
       return {
@@ -58,12 +58,12 @@ export async function calculateShippingCharges(params: {
   test?: boolean;
 }): Promise<DelhiveryRateResponse> {
   try {
-    const response = await fetch('/api/delhivery/calculate-shipping', {
+    const response = await fetch('/api/delhivery?action=calculate-shipping', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(params)
+      body: JSON.stringify({ ...params, action: 'calculate-shipping' })
     });
     if (!response.ok) {
       return {
@@ -87,19 +87,20 @@ export async function calculateShippingCharges(params: {
 
 /**
  * Creates a Delhivery shipment for a placed order using pickup location "amrparfumes".
- * Calls secure server route /api/delhivery/create-shipment
+ * Calls secure server route /api/delhivery?action=create-shipment
  */
 export async function createDelhiveryShipment(
   order: Order,
   isTestMode = false
 ): Promise<DelhiveryShipmentResponse> {
   try {
-    const response = await fetch('/api/delhivery/create-shipment', {
+    const response = await fetch('/api/delhivery?action=create-shipment', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
+        action: 'create-shipment',
         order,
         isTestMode
       })
@@ -137,13 +138,13 @@ export async function createDelhiveryShipment(
 
 /**
  * Tracks a package in real time using AWB number or Order ID.
- * Calls secure server route /api/delhivery/track-shipment
+ * Calls secure server route /api/delhivery?action=track-shipment
  */
 export async function trackDelhiveryShipment(
   waybillOrOrderId: string
 ): Promise<DelhiveryTrackingResponse> {
   try {
-    const response = await fetch(`/api/delhivery/track-shipment?waybill=${encodeURIComponent(waybillOrOrderId.trim())}`);
+    const response = await fetch(`/api/delhivery?action=track-shipment&waybill=${encodeURIComponent(waybillOrOrderId.trim())}`);
     const data = await response.json().catch(() => ({
       success: false,
       error: 'Failed to parse tracking response'
@@ -178,7 +179,7 @@ export async function trackDelhiveryShipment(
  */
 export async function testDelhiveryConnection(pincode = '110001'): Promise<any> {
   try {
-    const response = await fetch(`/api/delhivery/test-connection?pincode=${encodeURIComponent(pincode.trim())}`);
+    const response = await fetch(`/api/delhivery?action=test-connection&pincode=${encodeURIComponent(pincode.trim())}`);
     return await response.json();
   } catch (err: any) {
     return {
@@ -198,7 +199,7 @@ export async function getDelhiveryStatus(): Promise<{
   environment: string;
 }> {
   try {
-    const response = await fetch('/api/delhivery/status');
+    const response = await fetch('/api/delhivery?action=status');
     if (!response.ok) {
       return {
         isConfigured: false,

@@ -44,7 +44,8 @@ export const ScentQuizModal: React.FC<ScentQuizModalProps> = ({
         { label: "Prestige Saffron & Smoked Tuscan Leather", value: "leather", icon: "👑", matchId: "alif-escala" },
         { label: "Royal White Musk & Silken Cashmere", value: "musk", icon: "🤍", matchId: "musk-rijali" },
         { label: "Intense Cardamom & Warm Glazed Chestnut", value: "warm-spicy", icon: "🌰", matchId: "armani-stronger" },
-        { label: "Sunlit Citrus & Airy Summer Oud", value: "citrus-oud", icon: "☀️", matchId: "summer-oud" }
+        { label: "Sunlit Citrus & Airy Summer Oud", value: "citrus-oud", icon: "☀️", matchId: "summer-oud" },
+        { label: "Royal Imperial Citrus & Noble Smoked Oud", value: "imperial-oud", icon: "🌿", matchId: "inperial" }
       ]
     },
     {

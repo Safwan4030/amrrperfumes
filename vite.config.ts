@@ -11,9 +11,6 @@ function apiDevServerPlugin(): Plugin {
         if (req.url?.startsWith('/api/')) {
           const [pathname, queryString] = (req.url || '').split('?');
           
-          // Map /api/xyz or /api/delhivery/xyz to /api/xyz.ts or /api/delhivery/xyz.ts
-          const modulePath = `${pathname}.ts`;
-
           // Parse query params
           const queryParams: Record<string, string> = {};
           if (queryString) {
@@ -22,6 +19,26 @@ function apiDevServerPlugin(): Plugin {
               queryParams[key] = val;
             });
           }
+
+          // Map API routes to consolidated serverless handlers
+          let targetPath = pathname;
+          if (pathname === '/api/send-order-email') {
+            targetPath = '/api/send-email';
+            if (!queryParams['type']) queryParams['type'] = 'order';
+          } else if (pathname === '/api/send-otp-email') {
+            targetPath = '/api/send-email';
+            if (!queryParams['type']) queryParams['type'] = 'otp';
+          } else if (pathname.startsWith('/api/accounts')) {
+            targetPath = '/api/accounts';
+            if (pathname.includes('refund') && !queryParams['action']) queryParams['action'] = 'refund';
+            else if (pathname.includes('summary') && !queryParams['action']) queryParams['action'] = 'summary';
+          } else if (pathname.startsWith('/api/delhivery')) {
+            targetPath = '/api/delhivery';
+            const sub = pathname.replace('/api/delhivery', '').replace(/^\//, '');
+            if (sub && !queryParams['action']) queryParams['action'] = sub;
+          }
+
+          const modulePath = `${targetPath}.ts`;
 
           let body = '';
           req.on('data', chunk => { body += chunk; });

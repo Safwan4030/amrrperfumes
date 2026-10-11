@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X } from 'lucide-react';
 import { Product } from '../types';
 import { Currency, formatPrice } from '../utils/helpers';
+import { resolveProductImage } from '../data/products';
 
 interface SearchModalProps {
   isOpen: boolean;
@@ -23,13 +24,18 @@ export const SearchModal: React.FC<SearchModalProps> = ({
 
   if (!isOpen) return null;
 
-  const filtered = products.filter(p => 
-    p.name.toLowerCase().includes(query.toLowerCase()) ||
-    p.family.toLowerCase().includes(query.toLowerCase()) ||
-    p.category.toLowerCase().includes(query.toLowerCase()) ||
-    p.notes.top.some(n => n.toLowerCase().includes(query.toLowerCase())) ||
-    p.notes.base.some(n => n.toLowerCase().includes(query.toLowerCase()))
-  );
+  const q = query.toLowerCase().trim();
+  const filtered = products.filter(p => {
+    if (!q) return true;
+    const nameMatch = p.name.toLowerCase().includes(q);
+    const subtitleMatch = p.subtitle ? p.subtitle.toLowerCase().includes(q) : false;
+    const familyMatch = p.family ? p.family.toLowerCase().includes(q) : false;
+    const categoryMatch = p.category ? p.category.toLowerCase().includes(q) : false;
+    const topNotesMatch = p.notes?.top ? p.notes.top.some(n => n.toLowerCase().includes(q)) : false;
+    const heartNotesMatch = p.notes?.heart ? p.notes.heart.some(n => n.toLowerCase().includes(q)) : false;
+    const baseNotesMatch = p.notes?.base ? p.notes.base.some(n => n.toLowerCase().includes(q)) : false;
+    return nameMatch || subtitleMatch || familyMatch || categoryMatch || topNotesMatch || heartNotesMatch || baseNotesMatch;
+  });
 
   return (
     <AnimatePresence>
@@ -73,7 +79,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                   className="bg-white hover:bg-gray-50 p-3 rounded-xl border border-gray-200 flex items-center justify-between cursor-pointer transition-colors"
                 >
                   <div className="flex items-center gap-3">
-                    <img src={p.image} alt={p.name} referrerPolicy="no-referrer" className="w-12 h-12 object-contain bg-white rounded p-1 border border-gray-200" />
+                    <img src={resolveProductImage(p.image, p.id)} alt={p.name} referrerPolicy="no-referrer" className="w-12 h-12 object-contain bg-white rounded p-1 border border-gray-200" />
                     <div>
                       <h4 className="font-bold text-sm text-black">{p.name}</h4>
                       <p className="text-[11px] text-gray-500">{p.category} • {p.family}</p>

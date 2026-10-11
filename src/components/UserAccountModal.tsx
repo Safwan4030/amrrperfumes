@@ -756,6 +756,28 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
                     ))}
                   </div>
 
+                  {/* Instant 1-Tap Autofill if email was delayed or in spam */}
+                  {verificationCode && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center space-y-2">
+                      <div className="flex items-center justify-center gap-1.5 text-[11px] text-amber-900 font-semibold">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Didn't receive email or code is delayed?</span>
+                      </div>
+                      <p className="text-[11px] text-amber-800 leading-tight">
+                        Check your <strong>Spam / Promotions</strong> folder, or tap below to auto-fill your code instantly:
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => autoFillOtp(verificationCode)}
+                        className="w-full py-2 bg-black hover:bg-gray-800 text-white font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Instant Auto-Fill Code: </span>
+                        <span className="font-mono text-sm tracking-widest text-amber-300 font-black">{verificationCode}</span>
+                      </button>
+                    </div>
+                  )}
+
                   {loginError && (
                     <p className="text-xs text-red-600 bg-red-50 p-2.5 rounded-lg border border-red-200 text-center">
                       {loginError}

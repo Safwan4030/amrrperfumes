@@ -8,6 +8,8 @@ import alifEscalaImg from '../assets/images/amrr_alif_escala_1789571550285.jpg';
 import muskRijaliImg from '../assets/images/amrr_musk_rijali_1789571573753.jpg';
 import armaniStrongerImg from '../assets/images/amrr_armani_stronger_1789571589257.jpg';
 import summerOudImg from '../assets/images/amrr_summer_oud_1789571608216.jpg';
+import inperialImg from '../assets/images/inperial_catalog_1785806775988.jpg';
+import inperialGreenImg from '../assets/images/inperial_perfume_green_1785770154437.jpg';
 
 export const INITIAL_PRODUCTS: Product[] = [
   {
@@ -378,6 +380,54 @@ export const INITIAL_PRODUCTS: Product[] = [
         verified: true
       }
     ]
+  },
+  {
+    id: 'inperial',
+    name: 'Inperial',
+    subtitle: 'Royal Green Mandarin & Smoked Imperial Oud (50 ml)',
+    category: 'Extrait de Parfum',
+    family: 'Woody Fresh Oud',
+    shortDescription: 'A sovereign formulation of crisp Italian green mandarin, aromatic juniper, and noble Indonesian agarwood. The epitome of modern royalty.',
+    story: 'Inperial was composed to capture the majesty of royal gardens at twilight. Opening with zesty green citrus and sun-warmed spices, it reveals an opulent heart of velvet iris and Damascus cedar, grounded by 15-year aged wild agarwood and golden ambergris.',
+    price50ml: 1249,
+    originalPrice50ml: 1549,
+    costPrice: 420,
+    availableSizes: ['50 ml'],
+    rating: 4.9,
+    reviewCount: 142,
+    inStock: true,
+    stockQuantity: 16,
+    isBestSeller: true,
+    isNewArrival: false,
+    isPublished: true,
+    image: inperialImg,
+    gallery: [
+      inperialImg,
+      inperialGreenImg
+    ],
+    notes: {
+      top: ['Calabrian Green Mandarin', 'Italian Bergamot', 'Pink Peppercorn'],
+      heart: ['Florentine Iris', 'Damascus Cedarwood', 'Wild Juniper'],
+      base: ['Aged Indonesian Agarwood', 'Royal Ambergris', 'Bourbon Vetiver']
+    },
+    longevity: 5,
+    projection: 5,
+    sillage: 'Enveloping',
+    gender: 'Unisex',
+    season: ['All Seasons', 'Spring', 'Evening Gala'],
+    occasion: ['VIP Receptions', 'Executive Presence', 'Special Occasions'],
+    concentration: 'Extrait de Parfum',
+    ingredients: 'Alcohol Denat., Parfum (Fragrance), Aqua (Water), Limonene, Linalool, Citronellol, Geraniol, Eugenol, Citral.',
+    reviews: [
+      {
+        id: 'rev-10',
+        userName: 'Zayan K.',
+        rating: 5,
+        date: '3 days ago',
+        comment: 'Inperial has that royal, commanding green-citrus and smoky oud accord. Outstanding projection and sillage.',
+        verified: true
+      }
+    ]
   }
 ];
 
@@ -389,5 +439,51 @@ export const PRESET_IMAGES = [
   { name: 'Alif Escala', url: alifEscalaImg },
   { name: 'Musk Rijali', url: muskRijaliImg },
   { name: 'Armani Stronger', url: armaniStrongerImg },
-  { name: 'Summer Oud', url: summerOudImg }
+  { name: 'Summer Oud', url: summerOudImg },
+  { name: 'Inperial', url: inperialImg }
 ];
+
+export const ASSET_IMAGE_MAP: Record<string, string> = {
+  'khael-valley': khaelValleyImg,
+  'kaahf': kaahfImg,
+  'rosey-oud': roseyOudImg,
+  'akoya': akoyaImg,
+  'alif-escala': alifEscalaImg,
+  'musk-rijali': muskRijaliImg,
+  'armani-stronger': armaniStrongerImg,
+  'summer-oud': summerOudImg,
+  'inperial': inperialImg,
+  'inperial_catalog_1785806775988.jpg': inperialImg,
+  'inperial_perfume_green_1785770154437.jpg': inperialGreenImg,
+  '/src/assets/images/inperial_catalog_1785806775988.jpg': inperialImg,
+  '/src/assets/images/inperial_perfume_green_1785770154437.jpg': inperialGreenImg
+};
+
+/**
+ * Resolves a product image string to a working URL across all devices and bundler environments.
+ * If user uploaded a base64 Data URL, external HTTPS URL, or blob, returns it as-is.
+ * If it is a local asset path, maps it to the bundled asset URL.
+ */
+export function resolveProductImage(imageUri?: string, productId?: string): string {
+  if (!imageUri) {
+    if (productId && ASSET_IMAGE_MAP[productId]) return ASSET_IMAGE_MAP[productId];
+    return khaelValleyImg;
+  }
+  // Data URLs, HTTPS, HTTP, and Blob URLs are used directly
+  if (
+    imageUri.startsWith('data:') ||
+    imageUri.startsWith('http://') ||
+    imageUri.startsWith('https://') ||
+    imageUri.startsWith('blob:')
+  ) {
+    return imageUri;
+  }
+  // Check exact map key
+  if (ASSET_IMAGE_MAP[imageUri]) return ASSET_IMAGE_MAP[imageUri];
+  // Check filename only
+  const filename = imageUri.split('/').pop() || '';
+  if (ASSET_IMAGE_MAP[filename]) return ASSET_IMAGE_MAP[filename];
+  // Check product ID fallback
+  if (productId && ASSET_IMAGE_MAP[productId]) return ASSET_IMAGE_MAP[productId];
+  return imageUri;
+}
