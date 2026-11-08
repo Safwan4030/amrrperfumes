@@ -26,75 +26,43 @@ import {
   logoutFirebase,
   recordSiteVisit,
   saveCustomerLead,
-  syncExistingOrdersToCustomerLeads,
-  subscribeToProducts,
-  getProductsFromFirestore,
-  saveProductToFirestore,
-  deleteProductFromFirestore,
-  getDeletedProductIds,
-  recordProductDeleted
+  syncExistingOrdersToCustomerLeads 
 } from './lib/firebase';
 
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [products, setProducts] = useState<Product[]>(() => {
-    const deletedIds = getDeletedProductIds();
     try {
       const saved = localStorage.getItem('amrr_catalog_products');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.filter((p: Product) => !deletedIds.includes(p.id));
+          return parsed.map((p: any) =>
+            !p.category || p.category.toLowerCase().includes('parfum')
+              ? {
+                  ...p,
+                  category: 'Extrait de Parfum',
+                  concentration: 'Extrait de Parfum',
+                  subtitle: p.subtitle ? p.subtitle.replace(/Eau de Parfum/gi, 'Extrait de Parfum') : 'Extrait de Parfum (50 ml)'
+                }
+              : p
+          );
         }
       }
     } catch (e) {
       console.warn('Failed to load custom products from localStorage', e);
     }
-    return INITIAL_PRODUCTS.filter((p: Product) => !deletedIds.includes(p.id));
+    return INITIAL_PRODUCTS;
   });
   const [currency, setCurrency] = useState<Currency>('INR');
   const [activeCategory, setActiveCategory] = useState<string>('all');
 
-  // SINGLE SOURCE OF TRUTH: Subscribe to real-time Cloud Firestore products
-  // Automatically synchronizes EVERY product field changed in Admin Dashboard to all devices and visitors
+  // Keep catalog synced in localStorage for permanent persistence
   useEffect(() => {
-    let isSubscribed = true;
-
-    // 1. Immediate fresh direct server read on mount
-    getProductsFromFirestore()
-      .then((serverProducts) => {
-        if (isSubscribed && serverProducts && serverProducts.length > 0) {
-          const deletedIds = getDeletedProductIds();
-          const filtered = serverProducts.filter(p => !deletedIds.includes(p.id));
-          if (filtered.length > 0) {
-            setProducts(filtered);
-            try {
-              localStorage.setItem('amrr_catalog_products', JSON.stringify(filtered));
-            } catch {}
-          }
-        }
-      })
-      .catch((err) => console.warn('Direct Firestore product fetch note:', err));
-
-    // 2. Real-time Snapshot Listener: triggers immediately whenever Admin changes anything
-    const unsubscribe = subscribeToProducts((firestoreProducts) => {
-      if (isSubscribed && firestoreProducts) {
-        const deletedIds = getDeletedProductIds();
-        const filtered = firestoreProducts.filter(p => !deletedIds.includes(p.id));
-        setProducts(filtered);
-        try {
-          localStorage.setItem('amrr_catalog_products', JSON.stringify(filtered));
-        } catch {}
-      }
-    }, (error) => {
-      console.warn('Firestore products stream warning:', error);
-    });
-
-    return () => {
-      isSubscribed = false;
-      if (typeof unsubscribe === 'function') unsubscribe();
-    };
-  }, []);
+    try {
+      localStorage.setItem('amrr_catalog_products', JSON.stringify(products));
+    } catch (e) {}
+  }, [products]);
 
   // Customer Account & Compulsory Email Login State
   const [currentUser, setCurrentUser] = useState<{ email: string; name: string; phone?: string; uid?: string } | null>(() => {
@@ -261,7 +229,7 @@ export default function App() {
     const unsubscribe = subscribeToOrders((firestoreOrders) => {
       if (firestoreOrders) {
         setOrders(firestoreOrders);
-        if (firestoreOrders.length > 0) {
+        if (isAdmin && firestoreOrders.length > 0) {
           syncExistingOrdersToCustomerLeads(firestoreOrders);
         }
       }
@@ -435,47 +403,17 @@ export default function App() {
     }
   };
 
-  // Storefront products: only display active published products
-  // Hidden/unpublished products are excluded from storefront but remain accessible in Admin
-  const storefrontProducts = products.filter(p => p.isPublished !== false);
-
-  const wishlistProducts = storefrontProducts.filter(p => wishlistIds.includes(p.id));
+  const wishlistProducts = products.filter(p => wishlistIds.includes(p.id));
 
   // Extract all distinct categories from current catalog (excluding core Extrait de Parfum)
-  const distinctCategories: string[] = Array.from(new Set(storefrontProducts.map(p => p.category)))
+  const distinctCategories: string[] = Array.from(new Set(products.map(p => p.category)))
     .filter((cat): cat is string => typeof cat === 'string' && cat.length > 0 && cat !== 'Extrait de Parfum' && cat !== 'Eau de Parfum');
 
   const filteredProducts = activeCategory === 'all'
-    ? storefrontProducts
+    ? products
     : (activeCategory === 'signature' || activeCategory === 'bestseller')
-      ? storefrontProducts.filter(p => p.id.toLowerCase() === 'akoya' || p.name.toLowerCase() === 'akoya' || p.isBestSeller)
-      : storefrontProducts.filter(p => p.category.toLowerCase() === activeCategory.toLowerCase());
-
-  // Keep cart items in sync with latest database prices and details
-  useEffect(() => {
-    setCartItems(prev => {
-      let changed = false;
-      const updated = prev.map(item => {
-        const liveProduct = products.find(p => p.id === item.product.id);
-        if (!liveProduct) return item;
-        if (
-          liveProduct.price50ml !== item.unitPrice ||
-          liveProduct.name !== item.product.name ||
-          liveProduct.inStock !== item.product.inStock ||
-          liveProduct.image !== item.product.image
-        ) {
-          changed = true;
-          return {
-            ...item,
-            product: liveProduct,
-            unitPrice: liveProduct.price50ml
-          };
-        }
-        return item;
-      });
-      return changed ? updated : prev;
-    });
-  }, [products]);
+      ? products.filter(p => p.id.toLowerCase() === 'akoya' || p.name.toLowerCase() === 'akoya' || p.isBestSeller)
+      : products.filter(p => p.category.toLowerCase() === activeCategory.toLowerCase());
 
   return (
     <div className="min-h-screen bg-white text-black font-sans antialiased selection:bg-black selection:text-white">
@@ -655,7 +593,7 @@ export default function App() {
       <ScentQuizModal
         isOpen={showQuiz}
         onClose={() => setShowQuiz(false)}
-        products={storefrontProducts}
+        products={products}
         currency={currency}
         onAddToCart={handleAddToCart}
         onBuyNow={handleBuyNow}
@@ -689,7 +627,7 @@ export default function App() {
       <SearchModal
         isOpen={showSearch}
         onClose={() => setShowSearch(false)}
-        products={storefrontProducts}
+        products={products}
         currency={currency}
         onSelectProduct={(p) => setQuickViewProduct(p)}
       />
@@ -703,32 +641,14 @@ export default function App() {
         currency={currency}
         currentUserEmail={currentUser?.email}
         onOpenLogin={() => setShowAccount(true)}
-        onUpdateProduct={async (updated) => {
+        onUpdateProduct={(updated) => {
           setProducts((prev) => prev.map(p => p.id === updated.id ? updated : p));
-          try {
-            await saveProductToFirestore(updated);
-          } catch (err) {
-            console.error('Error saving updated product to database:', err);
-          }
         }}
-        onAddProduct={async (newProduct) => {
+        onAddProduct={(newProduct) => {
           setProducts((prev) => [newProduct, ...prev.filter(p => p.id !== newProduct.id)]);
-          try {
-            await saveProductToFirestore(newProduct);
-          } catch (err) {
-            console.error('Error adding new product to database:', err);
-          }
         }}
-        onDeleteProduct={async (productId) => {
-          recordProductDeleted(productId);
+        onDeleteProduct={(productId) => {
           setProducts((prev) => prev.filter(p => p.id !== productId));
-          setCartItems((prev) => prev.filter(item => item.product.id !== productId));
-          setWishlistIds((prev) => prev.filter(id => id !== productId));
-          try {
-            await deleteProductFromFirestore(productId);
-          } catch (err) {
-            console.error('Error deleting product from database:', err);
-          }
         }}
         onUpdateOrder={(updated) => {
           setOrders((prev) => prev.map(o => o.id === updated.id ? updated : o));

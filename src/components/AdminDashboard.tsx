@@ -36,16 +36,13 @@ import {
 } from 'lucide-react';
 import { Product, Order, DelhiveryScanEvent, CustomerInboxMessage, CustomerLead, SiteVisitorStats } from '../types';
 import { Currency, formatPrice } from '../utils/helpers';
-import { PRESET_IMAGES, resolveProductImage } from '../data/products';
+import { PRESET_IMAGES } from '../data/products';
 import { 
   subscribeToMessages, 
   updateMessageStatusInFirestore, 
   deleteMessageFromFirestore,
   subscribeToSiteStats,
-  subscribeToCustomerLeads,
-  syncExistingOrdersToCustomerLeads,
-  saveProductToFirestore,
-  deleteProductFromFirestore
+  subscribeToCustomerLeads
 } from '../lib/firebase';
 import { AdminCustomersTab } from './AdminCustomersTab';
 import { AdminTrafficTab } from './AdminTrafficTab';
@@ -124,7 +121,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [formSuccessMessage, setFormSuccessMessage] = useState<string | null>(null);
   const [formErrorMessage, setFormErrorMessage] = useState<string | null>(null);
-  const [inventoryActionNotice, setInventoryActionNotice] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -137,17 +133,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     family: 'Woody Oud',
     price50ml: 999,
     originalPrice50ml: 1299,
-    costPrice: 400,
-    sku: '',
-    tags: '',
-    availableSizesText: '50 ml',
     stockQuantity: 20,
     inStock: true,
-    isPublished: true,
     shortDescription: 'Exquisite artisanal formulation crafted with rare botanical essences.',
     story: 'Distilled with high-concentration French botanicals and warm aged woods, creating an unmistakable trail.',
     image: '',
-    galleryText: '',
     topNotes: 'Calabrian Bergamot, Pink Pepper',
     heartNotes: 'Taif Rose, White Suede',
     baseNotes: 'Wild Agarwood, Bourbon Vanilla, Amber',
@@ -213,18 +203,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         setCustomerLeads(leads);
       });
 
-      // Synchronize all completed orders into persistent Cloud CRM
-      if (orders && orders.length > 0) {
-        syncExistingOrdersToCustomerLeads(orders).catch(() => {});
-      }
-
       return () => {
         unsubscribeMessages();
         unsubscribeStats();
         unsubscribeLeads();
       };
     }
-  }, [isAuthenticated, orders]);
+  }, [isAuthenticated]);
 
   if (!isOpen) return null;
 
@@ -244,17 +229,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       family: 'Woody Oud',
       price50ml: 999,
       originalPrice50ml: 1299,
-      costPrice: 400,
-      sku: `AMRR-${Date.now().toString().slice(-4)}`,
-      tags: 'Luxury, Extrait',
-      availableSizesText: '50 ml',
       stockQuantity: 20,
       inStock: true,
-      isPublished: true,
       shortDescription: 'Exquisite artisanal formulation crafted with rare botanical essences.',
       story: 'Distilled with high-concentration French botanicals and warm aged woods, creating an unmistakable trail.',
       image: PRESET_IMAGES[0]?.url || '',
-      galleryText: PRESET_IMAGES[0]?.url || '',
       topNotes: 'Calabrian Bergamot, Pink Pepper',
       heartNotes: 'Taif Rose, White Suede',
       baseNotes: 'Wild Agarwood, Bourbon Vanilla, Amber',
@@ -280,10 +259,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const standardCategories = ['Extrait de Parfum', 'Perfume Oil', 'Concentrated Attar', 'Cologne', 'Body Mist'];
     const isStandard = standardCategories.includes(p.category);
 
-    const initialGallery = Array.isArray(p.gallery) && p.gallery.length > 0
-      ? p.gallery
-      : [p.image || PRESET_IMAGES[0]?.url || ''];
-
     setFormState({
       name: p.name,
       subtitle: p.subtitle || `${p.category} (50 ml)`,
@@ -292,17 +267,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       family: p.family || 'Woody Oud',
       price50ml: p.price50ml,
       originalPrice50ml: p.originalPrice50ml || Math.round(p.price50ml * 1.25),
-      costPrice: p.costPrice || p.cogs || 400,
-      sku: p.sku || `AMRR-${p.id.toUpperCase()}`,
-      tags: Array.isArray(p.tags) ? p.tags.join(', ') : '',
-      availableSizesText: Array.isArray(p.availableSizes) && p.availableSizes.length > 0 ? p.availableSizes.join(', ') : '50 ml',
       stockQuantity: p.stockQuantity ?? 15,
       inStock: p.inStock ?? true,
-      isPublished: p.isPublished !== false,
       shortDescription: p.shortDescription || '',
       story: p.story || '',
       image: p.image || PRESET_IMAGES[0]?.url || '',
-      galleryText: initialGallery.join('\n'),
       topNotes: p.notes?.top?.join(', ') || '',
       heartNotes: p.notes?.heart?.join(', ') || '',
       baseNotes: p.notes?.base?.join(', ') || '',
@@ -333,23 +302,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     reader.onload = (event) => {
       const base64 = event.target?.result as string;
       if (base64) {
-        setFormState(prev => {
-          const currentGall = prev.galleryText.split('\n').filter(Boolean);
-          const updatedGall = [base64, ...currentGall.filter(u => u !== base64)];
-          return {
-            ...prev,
-            image: base64,
-            galleryText: updatedGall.join('\n')
-          };
-        });
+        setFormState(prev => ({ ...prev, image: base64 }));
         setFormErrorMessage(null);
       }
     };
     reader.readAsDataURL(file);
   };
 
-  // Save Add/Edit Perfume — PERSISTS DIRECTLY TO FIRESTORE DATABASE
-  const handleSaveProduct = async (e: React.FormEvent) => {
+  // Save Add/Edit Perfume
+  const handleSaveProduct = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formState.name.trim()) {
       setFormErrorMessage('Please provide a perfume name.');
@@ -373,25 +334,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     const existing = products.find(p => p.id === productId);
 
-    const parsedGallery = formState.galleryText
-      ? formState.galleryText.split(/[\n,]+/).map(s => s.trim()).filter(Boolean)
-      : [];
-
-    const effectiveMainImage = formState.image || parsedGallery[0] || existing?.image || PRESET_IMAGES[0]?.url;
-    const finalGallery = parsedGallery.length > 0 
-      ? [effectiveMainImage, ...parsedGallery.filter(u => u !== effectiveMainImage)]
-      : (existing?.gallery && existing.gallery.length > 0 ? existing.gallery : [effectiveMainImage]);
-
-    const parsedSizes = formState.availableSizesText
-      ? formState.availableSizesText.split(/[\n,]+/).map(s => s.trim()).filter(Boolean)
-      : (existing?.availableSizes && existing.availableSizes.length > 0 ? existing.availableSizes : ['50 ml']);
-
-    const calcDiscount = formState.originalPrice50ml && Number(formState.originalPrice50ml) > Number(formState.price50ml)
-      ? Math.round(((Number(formState.originalPrice50ml) - Number(formState.price50ml)) / Number(formState.originalPrice50ml)) * 100)
-      : undefined;
-
     const productPayload: Product = {
-      ...existing,
       id: productId,
       name: formState.name.trim(),
       subtitle: formState.subtitle.trim() || `${effectiveCategory} (50 ml)`,
@@ -399,19 +342,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       family: formState.family.trim() || 'Woody Oud',
       price50ml: Number(formState.price50ml),
       originalPrice50ml: Number(formState.originalPrice50ml) || undefined,
-      costPrice: Number(formState.costPrice) || undefined,
-      cogs: Number(formState.costPrice) || undefined,
-      discount: calcDiscount,
-      sku: formState.sku.trim() || undefined,
-      tags: formState.tags ? formState.tags.split(',').map(s => s.trim()).filter(Boolean) : existing?.tags,
-      availableSizes: parsedSizes.length > 0 ? parsedSizes : ['50 ml'],
+      availableSizes: ['50 ml'],
       stockQuantity: Number(formState.stockQuantity),
       inStock: Boolean(formState.inStock && Number(formState.stockQuantity) > 0),
-      isPublished: Boolean(formState.isPublished),
       shortDescription: formState.shortDescription.trim() || `Luxurious artisanal formulation crafted by AMRR Perfumes.`,
       story: formState.story.trim() || `Crafted with meticulous attention to detail, featuring high-concentration French botanicals and artisanal aged resins.`,
-      image: effectiveMainImage,
-      gallery: finalGallery,
+      image: formState.image || existing?.image || PRESET_IMAGES[0]?.url,
+      gallery: [formState.image || existing?.image || PRESET_IMAGES[0]?.url],
       notes: {
         top: parseNotes(formState.topNotes),
         heart: parseNotes(formState.heartNotes),
@@ -430,16 +367,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       reviews: existing?.reviews || [],
       isBestSeller: formState.isBestSeller,
       isNewArrival: formState.isNewArrival,
-      isLimitedEdition: formState.isLimitedEdition,
-      updatedAt: new Date().toISOString()
+      isLimitedEdition: formState.isLimitedEdition
     };
-
-    // Save directly to the single source of truth (Firestore)
-    try {
-      await saveProductToFirestore(productPayload);
-    } catch (saveErr) {
-      console.error('Firestore save warning:', saveErr);
-    }
 
     if (productModalMode === 'add') {
       if (onAddProduct) {
@@ -447,10 +376,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       } else {
         onUpdateProduct(productPayload);
       }
-      setFormSuccessMessage(`"${productPayload.name}" saved to database and live on storefront!`);
+      setFormSuccessMessage(`"${productPayload.name}" added to catalog successfully!`);
     } else {
       onUpdateProduct(productPayload);
-      setFormSuccessMessage(`"${productPayload.name}" updated in database and live on storefront!`);
+      setFormSuccessMessage(`"${productPayload.name}" updated successfully!`);
     }
 
     setTimeout(() => {
@@ -459,67 +388,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }, 700);
   };
 
-  // Delete Perfume handler — PERSISTS TO FIRESTORE AND CATALOG
-  const handleDeleteProduct = async (productId: string) => {
-    const targetProduct = products.find(p => p.id === productId);
-    const prodName = targetProduct?.name || 'Perfume';
-
+  // Delete Perfume handler
+  const handleDeleteProduct = (productId: string) => {
     if (onDeleteProduct) {
       onDeleteProduct(productId);
-    } else {
-      try {
-        await deleteProductFromFirestore(productId);
-      } catch (dErr) {
-        console.error('Firestore delete warning:', dErr);
-      }
     }
-
     setConfirmDeleteId(null);
     setIsProductModalOpen(false);
-    setInventoryActionNotice({
-      text: `"${prodName}" has been successfully removed from catalog and database.`,
-      type: 'success'
-    });
-    setTimeout(() => {
-      setInventoryActionNotice(null);
-    }, 4500);
-  };
-
-  // Quick toggle Publish/Hidden status directly from Admin inventory table
-  const handleTogglePublish = async (p: Product) => {
-    const updated: Product = {
-      ...p,
-      isPublished: p.isPublished === false ? true : false,
-      updatedAt: new Date().toISOString()
-    };
-
-    onUpdateProduct(updated);
-    try {
-      await saveProductToFirestore(updated);
-    } catch (err) {
-      console.error('Error toggling publish status in Firestore:', err);
-    }
   };
 
   const startEditProduct = (p: Product) => {
     handleOpenEditProduct(p);
   };
 
-  const saveProductEdit = async (p: Product) => {
-    const updated: Product = {
+  const saveProductEdit = (p: Product) => {
+    onUpdateProduct({
       ...p,
       price50ml: editPrice50,
       stockQuantity: editStock,
-      inStock: editStock > 0,
-      updatedAt: new Date().toISOString()
-    };
-
-    onUpdateProduct(updated);
-    try {
-      await saveProductToFirestore(updated);
-    } catch (err) {
-      console.error('Error updating product in Firestore:', err);
-    }
+      inStock: editStock > 0
+    });
     setEditingProductId(null);
   };
 
@@ -1151,31 +1039,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </span>
                   </div>
 
-                  {/* Action Notification Banner */}
-                  {inventoryActionNotice && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -6 }}
-                      className={`p-3 rounded-xl border flex items-center justify-between text-xs font-semibold ${
-                        inventoryActionNotice.type === 'success'
-                          ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
-                          : 'bg-red-50 text-red-900 border-red-200'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                        <span>{inventoryActionNotice.text}</span>
-                      </div>
-                      <button
-                        onClick={() => setInventoryActionNotice(null)}
-                        className="text-gray-500 hover:text-black p-1 cursor-pointer"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </motion.div>
-                  )}
-
                   {/* Products Table */}
                   <div className="overflow-x-auto border border-gray-200 rounded-xl bg-white">
                     <table className="w-full text-left text-xs border-collapse">
@@ -1185,7 +1048,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <th className="p-3">Category &amp; Accord</th>
                           <th className="p-3">50ml Price</th>
                           <th className="p-3">Inventory Stock</th>
-                          <th className="p-3">Visibility</th>
                           <th className="p-3">Actions</th>
                         </tr>
                       </thead>
@@ -1269,22 +1131,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   <span className={`w-1.5 h-1.5 rounded-full ${p.stockQuantity <= 0 ? 'bg-red-600' : p.stockQuantity < 10 ? 'bg-amber-600' : 'bg-emerald-600'}`} />
                                   {p.stockQuantity > 0 ? `${p.stockQuantity} in stock` : 'Out of Stock'}
                                 </span>
-                              </td>
-
-                              <td className="p-3 align-middle">
-                                <button
-                                  type="button"
-                                  onClick={() => handleTogglePublish(p)}
-                                  className={`px-2.5 py-1 rounded-full text-[11px] font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
-                                    p.isPublished === false
-                                      ? 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-300'
-                                      : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
-                                  }`}
-                                  title={p.isPublished === false ? 'Currently hidden. Click to publish on public storefront' : 'Currently published. Click to hide from public storefront'}
-                                >
-                                  <span className={`w-1.5 h-1.5 rounded-full ${p.isPublished === false ? 'bg-gray-400' : 'bg-emerald-600'}`} />
-                                  {p.isPublished === false ? 'Hidden' : 'Live'}
-                                </button>
                               </td>
 
                               <td className="p-3 align-middle">
@@ -2000,26 +1846,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       })}
                     </div>
                   </div>
-
-                  {/* Additional Gallery Photos */}
-                  <div className="pt-2 border-t border-gray-200">
-                    <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                      Gallery Photos (URLs, one per line — displayed in product image carousel)
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={formState.galleryText}
-                      onChange={(e) => setFormState(prev => ({ ...prev, galleryText: e.target.value }))}
-                      placeholder="Paste image URLs (one per line)..."
-                      className="w-full p-2 bg-white border border-gray-300 rounded-lg text-black text-xs outline-none"
-                    />
-                  </div>
                 </div>
 
-                {/* 3. Pricing, Inventory, SKU, COGS & Badges */}
+                {/* 3. Pricing, Inventory & Badges */}
                 <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-3">
                   <h5 className="font-bold text-xs uppercase tracking-wider text-black flex items-center gap-1.5">
-                    <Sliders className="w-3.5 h-3.5" /> 3. Pricing, Inventory, SKU &amp; Visibility
+                    <Sliders className="w-3.5 h-3.5" /> 3. Pricing, Stock &amp; Badges
                   </h5>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -2065,74 +1897,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
-                  {/* SKU, COGS, Tags & Sizes */}
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-1">
-                    <div>
-                      <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                        SKU Code
-                      </label>
-                      <input
-                        type="text"
-                        value={formState.sku}
-                        onChange={(e) => setFormState(prev => ({ ...prev, sku: e.target.value }))}
-                        placeholder="e.g. AMRR-KHAEL-50"
-                        className="w-full p-2 bg-white border border-gray-300 rounded-lg text-black outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                        Cost Price / COGS (₹)
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={formState.costPrice}
-                        onChange={(e) => setFormState(prev => ({ ...prev, costPrice: Number(e.target.value) }))}
-                        placeholder="e.g. 400"
-                        className="w-full p-2 bg-white border border-gray-300 rounded-lg text-black outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                        Tags <span className="text-gray-400 font-normal">(Comma-sep)</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={formState.tags}
-                        onChange={(e) => setFormState(prev => ({ ...prev, tags: e.target.value }))}
-                        placeholder="e.g. Luxury, Woody, Unisex"
-                        className="w-full p-2 bg-white border border-gray-300 rounded-lg text-black outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                        Bottle Sizes
-                      </label>
-                      <input
-                        type="text"
-                        value={formState.availableSizesText}
-                        onChange={(e) => setFormState(prev => ({ ...prev, availableSizesText: e.target.value }))}
-                        placeholder="e.g. 50 ml"
-                        className="w-full p-2 bg-white border border-gray-300 rounded-lg text-black outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Visibility & Badges */}
+                  {/* Badges & In Stock Toggle */}
                   <div className="pt-2 border-t border-gray-200 flex flex-wrap items-center gap-4">
-                    <label className="flex items-center gap-2 cursor-pointer font-bold text-emerald-900 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
-                      <input
-                        type="checkbox"
-                        checked={formState.isPublished}
-                        onChange={(e) => setFormState(prev => ({ ...prev, isPublished: e.target.checked }))}
-                        className="w-4 h-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500 cursor-pointer"
-                      />
-                      <span>Live on Public Storefront (Uncheck to hide/unpublish from catalog)</span>
-                    </label>
-
                     <label className="flex items-center gap-2 cursor-pointer font-bold text-black">
                       <input
                         type="checkbox"
@@ -2175,7 +1941,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
 
-                {/* 4. Scent Notes, Story & Description */}
+                {/* 4. Scent Notes & Description */}
                 <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-3">
                   <h5 className="font-bold text-xs uppercase tracking-wider text-black flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5" /> 4. Scent Pyramid &amp; Sensory Story
@@ -2190,32 +1956,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       value={formState.shortDescription}
                       onChange={(e) => setFormState(prev => ({ ...prev, shortDescription: e.target.value }))}
                       placeholder="Brief fragrance description for cards..."
-                      className="w-full p-2 bg-white border border-gray-300 rounded-lg text-black outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                      Full Fragrance Story &amp; Detailed Description
-                    </label>
-                    <textarea
-                      rows={3}
-                      value={formState.story}
-                      onChange={(e) => setFormState(prev => ({ ...prev, story: e.target.value }))}
-                      placeholder="Rich fragrance inspiration story and detailed description..."
-                      className="w-full p-2 bg-white border border-gray-300 rounded-lg text-black outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                      Formula Ingredients
-                    </label>
-                    <input
-                      type="text"
-                      value={formState.ingredients}
-                      onChange={(e) => setFormState(prev => ({ ...prev, ingredients: e.target.value }))}
-                      placeholder="e.g. Alcohol Denat., Parfum (Fragrance), Aqua (Water)..."
                       className="w-full p-2 bg-white border border-gray-300 rounded-lg text-black outline-none"
                     />
                   </div>
