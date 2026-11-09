@@ -37,6 +37,14 @@ export interface Product {
   isBestSeller?: boolean;
   isNewArrival?: boolean;
   isLimitedEdition?: boolean;
+  isPublished?: boolean;
+  sku?: string;
+  costPrice?: number;
+  cogs?: number;
+  discount?: number;
+  tags?: string[];
+  badges?: string[];
+  variants?: any[];
   image: string;
   gallery: string[];
   notes: FragranceNotes;
@@ -49,6 +57,9 @@ export interface Product {
   concentration: string;
   ingredients: string;
   reviews: ProductReview[];
+  updatedAt?: string;
+  createdAt?: string;
+  [key: string]: any;
 }
 
 export interface CartItem {
@@ -220,4 +231,100 @@ export interface SiteVisitorStats {
     page: string;
     referrer?: string;
   }[];
+}
+
+export type AccountingDateFilterOption = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_quarter' | 'this_year' | 'custom';
+
+export type ExpenseCategory = 
+  | 'Packaging' 
+  | 'Fragrance Oils' 
+  | 'Bottles & Caps' 
+  | 'Shipping & Logistics' 
+  | 'Marketing & Ads' 
+  | 'Rent & Utilities' 
+  | 'Salaries & Labor' 
+  | 'Software & Tech' 
+  | 'Taxes & Compliance' 
+  | 'Office & Misc' 
+  | string;
+
+export type IncomeCategory = 
+  | 'Product Sales' 
+  | 'Custom Fragrance' 
+  | 'Wholesale' 
+  | 'Consultation' 
+  | 'Shipping Fees' 
+  | 'Other Income' 
+  | string;
+
+export type PaymentMethodType = 
+  | 'Razorpay' 
+  | 'Bank Transfer' 
+  | 'Cash' 
+  | 'UPI' 
+  | 'Card' 
+  | 'Other' 
+  | string;
+
+export interface FinancialAccount {
+  id: string;
+  name: string;
+  type: 'bank' | 'cash' | 'razorpay' | 'upi' | 'other';
+  bankName?: string;
+  accountNumber?: string;
+  openingBalance: number;
+  currentBalance: number;
+  totalMoneyIn?: number;
+  totalMoneyOut?: number;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AccountingTransaction {
+  id: string;
+  date: string;
+  type: 'sale' | 'expense' | 'refund' | 'transfer';
+  amount: number;
+  description: string;
+  category?: string;
+  accountId?: string;
+  accountName?: string;
+  orderId?: string;
+  customerName?: string;
+  supplier?: string;
+  paymentMethod?: string;
+  paymentStatus?: string;
+  cogs?: number;
+  referenceNumber?: string;
+  notes?: string;
+  createdAt?: string;
+}
+
+export interface ExpenseItem {
+  id: string;
+  date: string;
+  description: string;
+  category: ExpenseCategory;
+  supplier: string;
+  amount: number;
+  paymentMethod: PaymentMethodType;
+  accountId: string;
+  accountName: string;
+  referenceNumber?: string;
+  notes?: string;
+  createdAt?: string;
+}
+
+export interface AccountTransfer {
+  id: string;
+  date: string;
+  fromAccountId: string;
+  fromAccountName: string;
+  toAccountId: string;
+  toAccountName: string;
+  amount: number;
+  referenceNumber?: string;
+  notes?: string;
+  createdAt?: string;
 }

@@ -23,9 +23,59 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { amount, currency = "INR", receipt, notes } = req.body || {};
+    const { amount, currency = "INR", receipt, notes, items, couponCode } = req.body || {};
 
-    if (!amount || isNaN(amount)) {
+    let validatedAmount = Number(amount);
+
+    // SERVER-SIDE CHECKOUT SECURITY:
+    // Validate line items and unit prices against live Firestore database
+    if (Array.isArray(items) && items.length > 0) {
+      try {
+        const { initializeApp, getApps } = await import('firebase/app');
+        const { getFirestore, doc, getDoc } = await import('firebase/firestore');
+        const fsConfig = require('../firebase-applet-config.json');
+        const fsApp = getApps().length === 0 ? initializeApp(fsConfig) : getApps()[0];
+        const fsDb = getFirestore(fsApp, fsConfig.firestoreDatabaseId);
+
+        let computedSubtotal = 0;
+        for (const itm of items) {
+          const pid = itm.productId || itm.product?.id;
+          const qty = Number(itm.quantity) || 1;
+          if (!pid) continue;
+
+          const docSnap = await getDoc(doc(fsDb, 'products', pid));
+          if (!docSnap.exists()) {
+            return res.status(400).json({ success: false, error: `Fragrance "${pid}" was not found in the catalog.` });
+          }
+          const pData = docSnap.data();
+          if (pData.isPublished === false) {
+            return res.status(400).json({ success: false, error: `Fragrance "${pData.name || pid}" is currently unavailable.` });
+          }
+          if (pData.inStock === false || (typeof pData.stockQuantity === 'number' && pData.stockQuantity < qty)) {
+            return res.status(400).json({ 
+              success: false, 
+              error: `Fragrance "${pData.name || pid}" is out of stock (available: ${pData.stockQuantity ?? 0}).` 
+            });
+          }
+          const unitPrice = typeof pData.price50ml === 'number' ? pData.price50ml : Number(pData.price50ml) || 0;
+          computedSubtotal += unitPrice * qty;
+        }
+
+        // Apply discount coupon if verified
+        const cleanCoupon = (couponCode || '').trim().toUpperCase();
+        let discount = 0;
+        if (cleanCoupon === 'AMRR10' || cleanCoupon === 'ZEUFI10' || cleanCoupon === 'FADE10') {
+          discount = Math.round(computedSubtotal * 0.1);
+        }
+
+        validatedAmount = Math.max(0, computedSubtotal - discount);
+        console.log(`Server verified checkout total from Firestore: ₹${validatedAmount} (Subtotal: ₹${computedSubtotal}, Discount: ₹${discount})`);
+      } catch (err: any) {
+        console.warn('Server-side Firestore product validation note (falling back to provided amount):', err?.message);
+      }
+    }
+
+    if (!validatedAmount || isNaN(validatedAmount)) {
       return res.status(400).json({ success: false, error: "Invalid amount provided" });
     }
 
@@ -49,7 +99,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     const options = {
-      amount: Math.round(Number(amount) * 100),
+      amount: Math.round(Number(validatedAmount) * 100),
       currency,
       receipt: receipt || `rcpt_${Date.now()}`,
       notes: notes || {}

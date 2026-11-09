@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Heart } from 'lucide-react';
 import { Product, BottleSize } from '../types';
 import { Currency } from '../utils/helpers';
+import { resolveProductImage } from '../data/products';
 
 interface ProductCardProps {
   product: Product;
@@ -55,7 +56,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
         {/* Perfume Bottle Photography */}
         <img 
-          src={product.image} 
+          src={resolveProductImage(product.image, product.id)} 
           alt={product.name} 
           referrerPolicy="no-referrer"
           className="w-full h-full object-contain mix-blend-multiply transition-transform duration-500 ease-out group-hover:scale-105"

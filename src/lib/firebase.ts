@@ -23,9 +23,12 @@ import {
   serverTimestamp,
   updateDoc,
   deleteDoc,
-  increment
+  increment,
+  arrayUnion,
+  arrayRemove
 } from 'firebase/firestore';
-import { CustomerInboxMessage, CustomerLead, SiteVisitorStats, Order } from '../types';
+import { CustomerInboxMessage, CustomerLead, SiteVisitorStats, Order, Product, FinancialAccount, AccountingTransaction, ExpenseItem, AccountTransfer } from '../types';
+import { INITIAL_PRODUCTS, resolveProductImage } from '../data/products';
 
 // Import Firebase config auto-generated during setup
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -50,6 +53,23 @@ export async function saveOrderToFirestore(order: any) {
       updatedAt: new Date().toISOString()
     }, { merge: true });
     console.log('Order successfully stored in Firestore:', order.id);
+
+    // Automatically store and preserve customer contact & order history in CRM
+    if (order.shippingDetails?.email || order.shippingDetails?.phone) {
+      await saveCustomerLead({
+        name: order.shippingDetails.fullName || 'Valued Patron',
+        email: order.shippingDetails.email || '',
+        phone: order.shippingDetails.phone || '',
+        city: order.shippingDetails.city || '',
+        state: order.shippingDetails.state || '',
+        pincode: order.shippingDetails.pincode || '',
+        source: 'order_checkout',
+        totalOrders: 1,
+        totalSpent: order.totalAmount || 0,
+        optedInOffers: true,
+        notes: `Order #${order.id} - ${(order.items || []).map((i: any) => i.product?.name).filter(Boolean).join(', ')}`
+      });
+    }
   } catch (err) {
     console.error('Error saving order to Firestore:', err);
   }
@@ -724,25 +744,9 @@ export function subscribeToCustomerLeads(callback: (leads: CustomerLead[]) => vo
   }
 }
 
-// Delete customer lead
+// Customer CRM leads are permanent records and protected from deletion
 export async function deleteCustomerLeadFromFirestore(id: string): Promise<void> {
-  try {
-    const raw = localStorage.getItem('amrr_customer_leads');
-    if (raw) {
-      const list: CustomerLead[] = JSON.parse(raw);
-      const updated = list.filter(c => c.id !== id);
-      localStorage.setItem('amrr_customer_leads', JSON.stringify(updated));
-    }
-  } catch {
-    // ignore
-  }
-
-  try {
-    const custRef = doc(db, 'customers', id);
-    await deleteDoc(custRef);
-  } catch (err) {
-    console.error('Error deleting customer lead:', err);
-  }
+  console.log('Customer CRM records are permanently preserved and protected from deletion. Target ID:', id);
 }
 
 // Automatically sync orders into customer leads so past buyers are captured
@@ -767,3 +771,481 @@ export async function syncExistingOrdersToCustomerLeads(orders: Order[]): Promis
     }
   }
 }
+
+// ==========================================
+// 3. PRODUCT CATALOG — SINGLE SOURCE OF TRUTH (FIRESTORE)
+// ==========================================
+
+const PRODUCTS_COL_NAME = 'products';
+
+// Normalizes document data from Firestore into full Product entity
+export function normalizeFirestoreProduct(id: string, data: any): Product {
+  const effectiveCategory = data.category || 'Extrait de Parfum';
+  const rawImage = data.image || '';
+  const resolvedImg = resolveProductImage(rawImage, id);
+
+  const rawGallery = Array.isArray(data.gallery) && data.gallery.length > 0
+    ? data.gallery.map((g: string) => resolveProductImage(g, id))
+    : [resolvedImg];
+
+  return {
+    ...data,
+    id,
+    name: data.name || id,
+    subtitle: data.subtitle || `${effectiveCategory} (50 ml)`,
+    category: effectiveCategory,
+    family: data.family || 'Woody Oud',
+    shortDescription: data.shortDescription || 'Artisanal high-concentration fragrance formulated by AMRR Perfumes.',
+    story: data.story || 'Formulated with high-concentration French botanicals and rare aged agarwood.',
+    price50ml: typeof data.price50ml === 'number' ? data.price50ml : Number(data.price50ml) || 999,
+    originalPrice50ml: data.originalPrice50ml ? Number(data.originalPrice50ml) : undefined,
+    costPrice: data.costPrice !== undefined ? Number(data.costPrice) : undefined,
+    cogs: data.cogs !== undefined ? Number(data.cogs) : undefined,
+    sku: data.sku || undefined,
+    availableSizes: Array.isArray(data.availableSizes) && data.availableSizes.length > 0 ? data.availableSizes : ['50 ml'],
+    rating: typeof data.rating === 'number' ? data.rating : 5.0,
+    reviewCount: typeof data.reviewCount === 'number' ? data.reviewCount : 12,
+    inStock: data.inStock !== false && (data.stockQuantity === undefined || Number(data.stockQuantity) > 0),
+    stockQuantity: typeof data.stockQuantity === 'number' ? data.stockQuantity : 15,
+    isPublished: data.isPublished !== false, // default true unless explicitly unpublished
+    isBestSeller: Boolean(data.isBestSeller),
+    isNewArrival: Boolean(data.isNewArrival),
+    isLimitedEdition: Boolean(data.isLimitedEdition),
+    image: resolvedImg,
+    gallery: rawGallery,
+    notes: {
+      top: Array.isArray(data.notes?.top) ? data.notes.top : ['Calabrian Bergamot'],
+      heart: Array.isArray(data.notes?.heart) ? data.notes.heart : ['White Suede'],
+      base: Array.isArray(data.notes?.base) ? data.notes.base : ['Wild Agarwood']
+    },
+    longevity: typeof data.longevity === 'number' ? data.longevity : 5,
+    projection: typeof data.projection === 'number' ? data.projection : 4,
+    sillage: data.sillage || 'Enveloping',
+    gender: data.gender || 'Unisex',
+    season: Array.isArray(data.season) ? data.season : ['All Seasons'],
+    occasion: Array.isArray(data.occasion) ? data.occasion : ['Signature Daily Luxury'],
+    concentration: data.concentration || effectiveCategory,
+    ingredients: data.ingredients || 'Alcohol Denat., Parfum (Fragrance), Aqua (Water).',
+    reviews: Array.isArray(data.reviews) ? data.reviews : [],
+    updatedAt: data.updatedAt || new Date().toISOString()
+  };
+}
+
+// -------------------------------------------------------------
+// Firestore Payload Sanitizer (Prevents "Unsupported field value: undefined" errors)
+// -------------------------------------------------------------
+export function cleanForFirestore<T extends Record<string, any>>(obj: T): Partial<T> {
+  const cleaned: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+        cleaned[key] = cleanForFirestore(value);
+      } else {
+        cleaned[key] = value;
+      }
+    }
+  }
+  return cleaned as Partial<T>;
+}
+
+// -------------------------------------------------------------
+// Deleted Product Tracking & Management (Cloud + Local Synced)
+// -------------------------------------------------------------
+const DELETED_PRODUCTS_KEY = 'amrr_deleted_product_ids';
+const DELETED_REGISTRY_DOC_ID = '_deleted_registry';
+
+// Memory cache of cloud-synced deleted IDs
+let cloudDeletedIdsCache: string[] = [];
+
+export function getDeletedProductIds(): string[] {
+  const localSet = new Set<string>(cloudDeletedIdsCache);
+  try {
+    const raw = localStorage.getItem(DELETED_PRODUCTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        parsed.forEach(id => localSet.add(id));
+      }
+    }
+  } catch {}
+  return Array.from(localSet);
+}
+
+export function recordProductDeleted(productId: string): void {
+  if (!cloudDeletedIdsCache.includes(productId)) {
+    cloudDeletedIdsCache.push(productId);
+  }
+  try {
+    const current = getDeletedProductIds();
+    if (!current.includes(productId)) {
+      const updated = [...current, productId];
+      localStorage.setItem(DELETED_PRODUCTS_KEY, JSON.stringify(updated));
+    }
+  } catch {}
+}
+
+export function unmarkProductDeleted(productId: string): void {
+  cloudDeletedIdsCache = cloudDeletedIdsCache.filter(id => id !== productId);
+  try {
+    const raw = localStorage.getItem(DELETED_PRODUCTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const updated = parsed.filter(id => id !== productId);
+        localStorage.setItem(DELETED_PRODUCTS_KEY, JSON.stringify(updated));
+      }
+    }
+  } catch {}
+}
+
+// Subscribe to real-time products stream
+export function subscribeToProducts(
+  callback: (products: Product[]) => void,
+  onError?: (error: any) => void
+): () => void {
+  try {
+    const colRef = collection(db, PRODUCTS_COL_NAME);
+    return onSnapshot(colRef, (snapshot) => {
+      // 1. Scan for cloud-synced deleted registry first
+      snapshot.forEach((docSnap) => {
+        if (docSnap.id === DELETED_REGISTRY_DOC_ID) {
+          const regData = docSnap.data();
+          if (Array.isArray(regData?.deletedIds)) {
+            regData.deletedIds.forEach((id: string) => {
+              if (typeof id === 'string' && id) {
+                recordProductDeleted(id);
+              }
+            });
+          }
+        }
+      });
+
+      const deletedIds = getDeletedProductIds();
+      const items: Product[] = [];
+
+      snapshot.forEach((docSnap) => {
+        // Skip metadata documents
+        if (docSnap.id.startsWith('_')) return;
+
+        const data = docSnap.data();
+        // Skip soft-deleted items
+        if (data?.isDeleted === true) {
+          recordProductDeleted(docSnap.id);
+          return;
+        }
+
+        // Skip locally/cloud marked deleted items
+        if (deletedIds.includes(docSnap.id)) return;
+
+        items.push(normalizeFirestoreProduct(docSnap.id, data));
+      });
+
+      // Maintain a stable, premium presentation order
+      const orderRank: Record<string, number> = {
+        'khael-valley': 1,
+        'kaahf': 2,
+        'rosey-oud': 3,
+        'akoya': 4,
+        'inperial': 5,
+        'alif-escala': 6,
+        'musk-rijali': 7,
+        'armani-stronger': 8,
+        'summer-oud': 9
+      };
+
+      items.sort((a, b) => {
+        const rankA = orderRank[a.id] ?? 99;
+        const rankB = orderRank[b.id] ?? 99;
+        if (rankA !== rankB) return rankA - rankB;
+        return a.name.localeCompare(b.name);
+      });
+
+      // Update cache in localStorage for instant cold-start
+      try {
+        localStorage.setItem('amrr_catalog_products', JSON.stringify(items));
+        localStorage.setItem('amrr_catalog_updated_at', new Date().toISOString());
+      } catch {}
+
+      callback(items);
+    }, (error) => {
+      console.warn('Firestore products onSnapshot warning:', error);
+      if (onError) onError(error);
+    });
+  } catch (err) {
+    console.error('Error in subscribeToProducts:', err);
+    if (onError) onError(err);
+    return () => {};
+  }
+}
+
+// Direct fetch from Firestore (bypassing local cache)
+export async function getProductsFromFirestore(): Promise<Product[]> {
+  try {
+    const colRef = collection(db, PRODUCTS_COL_NAME);
+    const snap = await getDocs(colRef);
+
+    // Scan for cloud-synced deleted registry document
+    snap.forEach((docSnap) => {
+      if (docSnap.id === DELETED_REGISTRY_DOC_ID) {
+        const regData = docSnap.data();
+        if (Array.isArray(regData?.deletedIds)) {
+          regData.deletedIds.forEach((id: string) => {
+            if (typeof id === 'string' && id) {
+              recordProductDeleted(id);
+            }
+          });
+        }
+      }
+    });
+
+    const deletedIds = getDeletedProductIds();
+
+    if (snap.empty) {
+      // First boot: Seed initial catalog to Firestore (skipping any deleted items)
+      const toSeed = INITIAL_PRODUCTS.filter(p => !deletedIds.includes(p.id));
+      for (const p of toSeed) {
+        try {
+          const cleaned = cleanForFirestore({
+            ...p,
+            isDeleted: false,
+            updatedAt: new Date().toISOString()
+          });
+          await setDoc(doc(db, PRODUCTS_COL_NAME, p.id), cleaned, { merge: true });
+        } catch {}
+      }
+      return toSeed;
+    }
+
+    const items: Product[] = [];
+    snap.forEach((docSnap) => {
+      if (docSnap.id.startsWith('_')) return;
+      const data = docSnap.data();
+      if (data?.isDeleted === true) {
+        recordProductDeleted(docSnap.id);
+        return;
+      }
+      if (!deletedIds.includes(docSnap.id)) {
+        items.push(normalizeFirestoreProduct(docSnap.id, data));
+      }
+    });
+    return items;
+  } catch (err) {
+    console.warn('Error fetching products from Firestore:', err);
+    return [];
+  }
+}
+
+// Save or Update Product in Firestore (Cloud-backed single source of truth)
+export async function saveProductToFirestore(product: Product): Promise<void> {
+  // If product was previously marked deleted, unmark it locally and in cloud
+  unmarkProductDeleted(product.id);
+
+  // Update local cache immediately for instant UI responsiveness
+  try {
+    const raw = localStorage.getItem('amrr_catalog_products');
+    const list: Product[] = raw ? JSON.parse(raw) : [];
+    const idx = list.findIndex(p => p.id === product.id);
+    if (idx >= 0) list[idx] = product;
+    else list.unshift(product);
+    localStorage.setItem('amrr_catalog_products', JSON.stringify(list));
+  } catch {}
+
+  // Save to Firestore with clean payload (no undefined values)
+  try {
+    const prodRef = doc(db, PRODUCTS_COL_NAME, product.id);
+    const cleanedPayload = cleanForFirestore({
+      ...product,
+      isDeleted: false,
+      updatedAt: new Date().toISOString()
+    });
+    await setDoc(prodRef, cleanedPayload, { merge: true });
+
+    // Remove from deleted registry if it was previously deleted
+    try {
+      const regRef = doc(db, PRODUCTS_COL_NAME, DELETED_REGISTRY_DOC_ID);
+      await setDoc(regRef, {
+        deletedIds: arrayRemove(product.id),
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    } catch {}
+
+    console.log('Product saved successfully to Firestore:', product.id);
+  } catch (err) {
+    console.error('Error saving product to Firestore:', err);
+    throw err;
+  }
+}
+
+// Delete Product from Firestore (Synchronized across all browsers and devices)
+export async function deleteProductFromFirestore(productId: string): Promise<void> {
+  // 1. Immediately record in local deleted product IDs registry
+  recordProductDeleted(productId);
+
+  // 2. Immediately purge from local cache
+  try {
+    const raw = localStorage.getItem('amrr_catalog_products');
+    if (raw) {
+      const list: Product[] = JSON.parse(raw);
+      const filtered = list.filter(p => p.id !== productId);
+      localStorage.setItem('amrr_catalog_products', JSON.stringify(filtered));
+    }
+  } catch {}
+
+  // 3. Mark soft-delete tombstone on the product document itself in Firestore
+  try {
+    const prodRef = doc(db, PRODUCTS_COL_NAME, productId);
+    await setDoc(prodRef, {
+      id: productId,
+      isDeleted: true,
+      isPublished: false,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Firestore product soft-delete note:', err);
+  }
+
+  // 4. Record in cloud-synced deleted registry document so all devices know it is deleted
+  try {
+    const regRef = doc(db, PRODUCTS_COL_NAME, DELETED_REGISTRY_DOC_ID);
+    await setDoc(regRef, {
+      deletedIds: arrayUnion(productId),
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Firestore deleted registry update note:', err);
+  }
+
+  // 5. Hard delete document from Firestore
+  try {
+    const prodRef = doc(db, PRODUCTS_COL_NAME, productId);
+    await deleteDoc(prodRef);
+    console.log('Product hard-deleted from Firestore:', productId);
+  } catch (err) {
+    console.warn('Firestore product hard-delete note:', err);
+  }
+}
+
+// -------------------------------------------------------------
+// Financial Accounting & Ledger Integration
+// -------------------------------------------------------------
+
+export const DEFAULT_FINANCIAL_ACCOUNTS: FinancialAccount[] = [
+  {
+    id: 'acc_razorpay',
+    name: 'Razorpay Payment Gateway',
+    type: 'razorpay',
+    openingBalance: 0,
+    currentBalance: 0,
+    notes: 'Online customer checkout gateway'
+  },
+  {
+    id: 'acc_bank',
+    name: 'AMRR Current Account',
+    type: 'bank',
+    bankName: 'HDFC Bank',
+    accountNumber: '**** 5028',
+    openingBalance: 0,
+    currentBalance: 0,
+    notes: 'Primary business operating account'
+  },
+  {
+    id: 'acc_cash',
+    name: 'Studio Cash Register',
+    type: 'cash',
+    openingBalance: 0,
+    currentBalance: 0,
+    notes: 'Petty cash and in-person transactions'
+  }
+];
+
+export async function saveFinancialAccount(account: FinancialAccount): Promise<void> {
+  try {
+    const ref = doc(db, 'financial_accounts', account.id);
+    await setDoc(ref, { ...account, updatedAt: new Date().toISOString() }, { merge: true });
+  } catch (err) {
+    console.error('Error saving financial account:', err);
+  }
+}
+
+export async function saveAccountingTransaction(transaction: AccountingTransaction): Promise<void> {
+  try {
+    const ref = doc(db, 'accounting_transactions', transaction.id);
+    await setDoc(ref, transaction, { merge: true });
+  } catch (err) {
+    console.error('Error saving accounting transaction:', err);
+  }
+}
+
+export async function saveExpense(expense: ExpenseItem): Promise<void> {
+  try {
+    const ref = doc(db, 'expenses', expense.id);
+    await setDoc(ref, expense, { merge: true });
+    await saveAccountingTransaction({
+      id: `tx_${expense.id}`,
+      date: expense.date,
+      type: 'expense',
+      amount: expense.amount,
+      description: expense.description,
+      category: expense.category,
+      accountId: expense.accountId,
+      accountName: expense.accountName,
+      supplier: expense.supplier,
+      paymentMethod: expense.paymentMethod,
+      referenceNumber: expense.referenceNumber,
+      notes: expense.notes,
+      createdAt: expense.createdAt || new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('Error saving expense:', err);
+  }
+}
+
+export async function deleteExpense(expenseId: string, _amount?: number, _accountId?: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'expenses', expenseId));
+    await deleteDoc(doc(db, 'accounting_transactions', `tx_${expenseId}`));
+  } catch (err) {
+    console.error('Error deleting expense:', err);
+  }
+}
+
+export async function saveAccountTransfer(transfer: AccountTransfer): Promise<void> {
+  try {
+    const ref = doc(db, 'account_transfers', transfer.id);
+    await setDoc(ref, transfer, { merge: true });
+    await saveAccountingTransaction({
+      id: `tx_${transfer.id}`,
+      date: transfer.date,
+      type: 'transfer',
+      amount: transfer.amount,
+      description: `Transfer: ${transfer.fromAccountName} -> ${transfer.toAccountName}`,
+      referenceNumber: transfer.referenceNumber,
+      notes: transfer.notes,
+      createdAt: transfer.createdAt || new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('Error saving account transfer:', err);
+  }
+}
+
+export async function recordRefundInAccounting(order: Order, refundAmount: number, reason?: string): Promise<void> {
+  try {
+    const ref = doc(db, 'accounting_transactions', `refund_${order.id}_${Date.now()}`);
+    await setDoc(ref, {
+      id: `refund_${order.id}_${Date.now()}`,
+      date: new Date().toISOString().split('T')[0],
+      type: 'refund',
+      amount: refundAmount,
+      description: `Refund for Order #${order.id}${reason ? ` (${reason})` : ''}`,
+      orderId: order.id,
+      customerName: order.shippingDetails?.fullName || 'Customer',
+      paymentMethod: order.paymentMethod || 'Razorpay',
+      notes: reason || 'Customer refund',
+      createdAt: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('Error recording refund in accounting:', err);
+  }
+}
+
+

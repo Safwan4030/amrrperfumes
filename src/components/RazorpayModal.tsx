@@ -272,7 +272,13 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
         notes: {
           customer_email: shipping.email,
           customer_name: shipping.fullName
-        }
+        },
+        items: cartItems.map(item => ({
+          productId: item.product.id,
+          quantity: item.quantity,
+          selectedSize: item.selectedSize
+        })),
+        couponCode: couponCode || undefined
       });
 
       if (!orderData.key_id) {
