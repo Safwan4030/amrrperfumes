@@ -36,7 +36,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { Product, Order, DelhiveryScanEvent, CustomerInboxMessage, CustomerLead, SiteVisitorStats } from '../types';
-import { Currency, formatPrice } from '../utils/helpers';
+import { Currency, formatPrice, formatOrderId } from '../utils/helpers';
 import { PRESET_IMAGES, resolveProductImage } from '../data/products';
 import { 
   subscribeToMessages, 
@@ -1038,7 +1038,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           {orders.map((ord) => (
                             <tr key={ord.id} className="hover:bg-gray-50 transition-colors">
                               <td className="p-3 align-top">
-                                <span className="font-mono font-bold text-black block">{ord.id}</span>
+                                <span className="font-mono font-bold text-black block">{formatOrderId(ord.id)}</span>
                                 <span className="text-[11px] text-gray-500 block">{ord.createdAt}</span>
                                 <span className="text-[10px] text-gray-400 block truncate max-w-[120px]" title={ord.paymentId}>
                                   Pay ID: {ord.paymentId}

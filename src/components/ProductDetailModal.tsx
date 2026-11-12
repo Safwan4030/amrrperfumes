@@ -5,9 +5,7 @@ import {
   ShoppingBag, 
   Zap, 
   Heart, 
-  Sparkles,
-  CheckCircle2,
-  AlertCircle
+  Sparkles
 } from 'lucide-react';
 import { Product, BottleSize } from '../types';
 import { Currency, formatPrice } from '../utils/helpers';
@@ -33,8 +31,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   onAddToCart,
   onBuyNow,
 }) => {
-  const [quantity, setQuantity] = useState(1);
-  const [selectedGalleryIdx, setSelectedGalleryIdx] = useState(0);
+  const [quantity] = useState(1);
 
   if (!product) return null;
 
@@ -43,12 +40,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   const originalPrice = product.originalPrice50ml;
   const isAvailable = product.inStock && (product.stockQuantity === undefined || product.stockQuantity > 0);
 
-  const galleryList = Array.isArray(product.gallery) && product.gallery.length > 0
-    ? product.gallery
-    : [product.image];
-
-  const activeImage = galleryList[selectedGalleryIdx] || product.image;
-  const resolvedMainImage = resolveProductImage(activeImage, product.id);
+  const resolvedMainImage = resolveProductImage(product.image, product.id);
 
   return (
     <AnimatePresence>
@@ -80,7 +72,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
           {/* Modal Content Scroll Area */}
           <div className="p-6 overflow-y-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
             
-            {/* Left Image Visualizer & Gallery Carousel */}
+            {/* Left Image Visualizer */}
             <div className="lg:col-span-6 space-y-4">
               <div className="relative bg-white rounded-xl p-6 h-80 sm:h-[400px] flex items-center justify-center overflow-hidden border border-gray-200 shadow-inner">
                 {/* Wishlist Button */}
@@ -102,52 +94,16 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   className="h-72 sm:h-88 w-auto object-contain mix-blend-multiply transition-transform duration-500 hover:scale-105"
                 />
               </div>
-
-              {/* Gallery Thumbnails */}
-              {galleryList.length > 1 && (
-                <div className="flex items-center gap-2.5 overflow-x-auto pb-1">
-                  {galleryList.map((gImg, idx) => {
-                    const thumbUrl = resolveProductImage(gImg, product.id);
-                    const isSelected = selectedGalleryIdx === idx;
-                    return (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => setSelectedGalleryIdx(idx)}
-                        className={`w-16 h-16 rounded-xl border-2 p-1 bg-white flex-shrink-0 transition-all cursor-pointer overflow-hidden ${
-                          isSelected ? 'border-black ring-2 ring-black/20' : 'border-gray-200 hover:border-gray-400 opacity-70 hover:opacity-100'
-                        }`}
-                      >
-                        <img 
-                          src={thumbUrl} 
-                          alt={`${product.name} angle ${idx + 1}`}
-                          className="w-full h-full object-contain mix-blend-multiply"
-                        />
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
             </div>
 
             {/* Right Details & Configuration */}
             <div className="lg:col-span-6 space-y-5 flex flex-col justify-between">
               
               <div className="space-y-4">
-                {/* Title and Stock Indicator */}
+                {/* Title */}
                 <div>
-                  <div className="flex items-center gap-2 text-xs font-bold text-gray-600 uppercase tracking-widest mb-1">
-                    <span>{product.family}</span>
-                    <span>•</span>
-                    {isAvailable ? (
-                      <span className="text-emerald-700 font-bold flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> In Stock ({product.stockQuantity ?? 15} available)
-                      </span>
-                    ) : (
-                      <span className="text-red-600 font-bold flex items-center gap-1">
-                        <AlertCircle className="w-3.5 h-3.5" /> Currently Sold Out
-                      </span>
-                    )}
+                  <div className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">
+                    {product.family}
                   </div>
                   <h2 className="text-3xl sm:text-4xl font-extrabold text-black">
                     {product.name}
@@ -156,11 +112,6 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                     {product.subtitle}
                   </p>
                 </div>
-
-                {/* Short Description */}
-                <p className="text-sm text-gray-700 leading-relaxed">
-                  {product.shortDescription}
-                </p>
 
                 {/* Olfactory Notes Pyramid */}
                 {product.notes && (
@@ -191,50 +142,17 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   </div>
                 )}
 
-                {/* Size / Volume */}
-                <div className="pt-1">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Bottle Volume:
-                  </label>
-                  <div className="p-3 rounded-xl border border-gray-200 bg-gray-50 flex justify-between items-center">
-                    <div>
-                      <span className="block font-bold text-sm text-black">50 ml</span>
-                      <span className="text-xs text-gray-500">1.7 FL.OZ Pure Extrait de Parfum</span>
-                    </div>
-                    <div className="text-right">
-                      <span className="font-bold text-base text-black">
-                        {formatPrice(product.price50ml, currency)}
-                      </span>
-                      {originalPrice && originalPrice > currentPrice && (
-                        <span className="block text-xs text-gray-400 line-through">
-                          {formatPrice(originalPrice, currency)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
                 {/* Price Display */}
-                <div className="flex items-baseline gap-3 pt-1">
+                <div className="flex items-baseline gap-3 pt-2">
                   <span className="text-3xl font-extrabold text-black">
                     {formatPrice(currentPrice * quantity, currency)}
                   </span>
                   {originalPrice && originalPrice > currentPrice && (
-                    <span className="text-sm text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                      Save {Math.round(((originalPrice - currentPrice) / originalPrice) * 100)}%
+                    <span className="text-sm text-gray-400 line-through">
+                      {formatPrice(originalPrice * quantity, currency)}
                     </span>
                   )}
-                  <span className="text-xs text-black font-bold bg-gray-100 px-2 py-0.5 rounded border border-gray-200">
-                    Free Express Shipping
-                  </span>
                 </div>
-
-                {/* Ingredients Note */}
-                {product.ingredients && (
-                  <p className="text-[10px] text-gray-400 leading-normal border-t border-gray-100 pt-2">
-                    <strong className="text-gray-600">Formula Ingredients:</strong> {product.ingredients}
-                  </p>
-                )}
 
               </div>
 

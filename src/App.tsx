@@ -344,16 +344,6 @@ export default function App() {
     setCartItems([{ product, selectedSize, quantity, unitPrice }]);
     setCheckoutDiscount(0);
     setCheckoutCoupon('');
-
-    if (!currentUser) {
-      const pending = { discountAmount: 0, couponCode: '' };
-      pendingCheckoutRef.current = pending;
-      setPendingCheckoutAfterLogin(pending);
-      setAccountLoginNotice('Please log in to your customer account to proceed to payment. Your selected fragrance is ready for payment.');
-      setShowAccount(true);
-      return;
-    }
-
     setShowRazorpay(true);
   };
 
@@ -383,16 +373,6 @@ export default function App() {
     setCheckoutDiscount(discountAmount);
     setCheckoutCoupon(couponCode);
     setShowCart(false);
-
-    if (!currentUser) {
-      const pending = { discountAmount, couponCode };
-      pendingCheckoutRef.current = pending;
-      setPendingCheckoutAfterLogin(pending);
-      setAccountLoginNotice('Please log in to your customer account to proceed to payment. Your selected fragrances will be ready for payment immediately after sign-in.');
-      setShowAccount(true);
-      return;
-    }
-
     setShowRazorpay(true);
   };
 
@@ -664,16 +644,12 @@ export default function App() {
       {/* User Account / Orders Modal */}
       <UserAccountModal
         isOpen={showAccount}
-        onClose={() => {
-          setShowAccount(false);
-          setAccountLoginNotice(null);
-        }}
+        onClose={() => setShowAccount(false)}
         orders={orders}
         wishlistProducts={wishlistProducts}
         savedAddress={savedShipping}
         currency={currency}
         currentUser={currentUser}
-        loginNotice={accountLoginNotice}
         onLogin={handleCustomerLogin}
         onLogout={handleCustomerLogout}
         onRemoveWishlist={toggleWishlist}

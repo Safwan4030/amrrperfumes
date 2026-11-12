@@ -28,11 +28,10 @@ import {
   RotateCcw,
   Phone
 } from 'lucide-react';
-import { Order, Product, ShippingDetails, DelhiveryScanEvent } from '../types';
-import { Currency, formatPrice } from '../utils/helpers';
-import { trackDelhiveryShipment } from '../utils/delhivery';
-import { sendOrderConfirmationEmail, openEmailReceiptInMailClient, sendOtpEmail } from '../utils/email';
-import { signInWithGoogle, saveUserProfile, saveCustomerLead, getOrderById } from '../lib/firebase';
+import { Order, Product, ShippingDetails } from '../types';
+import { Currency, formatPrice, formatOrderId } from '../utils/helpers';
+import { sendOtpEmail } from '../utils/email';
+import { signInWithGoogle, saveUserProfile, saveCustomerLead } from '../lib/firebase';
 
 interface CustomerUser {
   email: string;
@@ -53,7 +52,6 @@ interface UserAccountModalProps {
   currentUser: CustomerUser | null;
   onLogin: (userData: { email: string; name: string; phone?: string }) => void;
   onLogout: () => void;
-  loginNotice?: string | null;
   onOpenAdmin?: () => void;
 }
 
@@ -69,23 +67,12 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
   currentUser,
   onLogin,
   onLogout,
-  loginNotice,
   onOpenAdmin
 }) => {
   const ADMIN_EMAILS = ['amrrperfumes@gmail.com', 'amrrparfumes@gmail.com', 'safwaanvv@gmail.com'];
   const isAdminUser = Boolean(currentUser?.email && ADMIN_EMAILS.includes(currentUser.email.trim().toLowerCase()));
 
-  const [activeTab, setActiveTab] = useState<'orders' | 'track' | 'wishlist' | 'address'>('orders');
-  const [trackQuery, setTrackQuery] = useState('');
-  const [searchedOrder, setSearchedOrder] = useState<Order | null>(null);
-  const [trackError, setTrackError] = useState<string | null>(null);
-  const [isFetchingLiveTrack, setIsFetchingLiveTrack] = useState(false);
-  const [liveScanEvents, setLiveScanEvents] = useState<DelhiveryScanEvent[]>([]);
-  const [copiedAwb, setCopiedAwb] = useState<string | null>(null);
-
-  // Email sending states
-  const [sendingEmailOrderId, setSendingEmailOrderId] = useState<string | null>(null);
-  const [emailStatusMessage, setEmailStatusMessage] = useState<{ [orderId: string]: string }>({});
+  const [activeTab, setActiveTab] = useState<'orders' | 'wishlist' | 'address'>('orders');
 
   // Customer Login Form State
   const [loginEmail, setLoginEmail] = useState('');
@@ -164,148 +151,14 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
   
   const displayedOrders = currentUser ? userOrders : [];
 
-  const fetchLiveTracking = async (awbOrId: string, baseOrder?: Order) => {
-    setIsFetchingLiveTrack(true);
-    try {
-      const res = await trackDelhiveryShipment(awbOrId);
-      if (res.scans && res.scans.length > 0) {
-        setLiveScanEvents(res.scans);
-      } else {
-        setLiveScanEvents([]);
-      }
-      
-      if (baseOrder) {
-        setSearchedOrder({
-          ...baseOrder,
-          delhiveryStatus: res.currentStatus || baseOrder.delhiveryStatus || 'In Transit',
-          status: res.currentStatus === 'Delivered' ? 'Delivered' : baseOrder.status
-        });
-      }
-    } catch {
-      setLiveScanEvents([]);
-    } finally {
-      setIsFetchingLiveTrack(false);
-    }
-  };
 
-  const handleTrackOrder = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const query = trackQuery.trim();
-    if (!query) {
-      setTrackError('Please enter an Order ID or Delhivery AWB number.');
-      setSearchedOrder(null);
-      return;
-    }
-
-    setTrackError(null);
-
-    let found = orders.find(
-      o => o.id.toLowerCase() === query.toLowerCase() ||
-           o.id.replace('ORD-', '').toLowerCase() === query.toLowerCase() ||
-           (o.awbNumber && o.awbNumber.toLowerCase() === query.toLowerCase())
-    );
-
-    if (!found) {
-      const orderIdToLookup = query.startsWith('ORD-') ? query : `ORD-${query.toUpperCase()}`;
-      found = (await getOrderById(orderIdToLookup)) || (await getOrderById(query)) || undefined;
-    }
-
-    if (found) {
-      setSearchedOrder(found);
-      const awbToTrack = found.awbNumber || found.id;
-      await fetchLiveTracking(awbToTrack, found);
-    } else {
-      const fallbackOrder: Order = {
-        id: query.startsWith('ORD-') ? query : `ORD-${query.toUpperCase()}`,
-        createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        items: orders[0]?.items || [],
-        subtotal: 2499,
-        discount: 0,
-        shippingFee: 0,
-        totalAmount: 2499,
-        currency: currency || 'INR',
-        paymentMethod: 'Prepaid / Verified',
-        paymentId: `pay_${Math.random().toString(36).substring(2, 12)}`,
-        shippingDetails: savedAddress || {
-          fullName: currentUser?.name || 'Valued Client',
-          email: currentUser?.email || 'client@example.com',
-          phone: currentUser?.phone || '+91 98765 43210',
-          address: '123 Scent Avenue',
-          city: 'New Delhi',
-          state: 'Delhi',
-          pincode: '110001',
-          saveInformation: true
-        },
-        status: 'In Transit',
-        estimatedDelivery: 'Within 48 Hours',
-        awbNumber: query.length > 8 && !query.startsWith('ORD-') ? query : undefined,
-        delhiveryPickupLocation: 'amrparfumes'
-      };
-
-      setSearchedOrder(fallbackOrder);
-      await fetchLiveTracking(query, fallbackOrder);
-    }
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedAwb(text);
-    setTimeout(() => setCopiedAwb(null), 2500);
-  };
-
-  const handleSendConfirmationEmail = async (ord: Order) => {
-    const targetEmail = ord.shippingDetails?.email || currentUser?.email;
-    if (!targetEmail) {
-      alert('No email address found for this order.');
-      return;
-    }
-
-    setSendingEmailOrderId(ord.id);
-    setEmailStatusMessage(prev => ({ ...prev, [ord.id]: 'Sending confirmation mail...' }));
-
-    try {
-      const result = await sendOrderConfirmationEmail({
-        ...ord,
-        shippingDetails: {
-          ...ord.shippingDetails,
-          email: targetEmail
-        }
-      });
-
-      if (result.success) {
-        setEmailStatusMessage(prev => ({ 
-          ...prev, 
-          [ord.id]: `✓ Mailed to ${targetEmail}` 
-        }));
-      } else {
-        setEmailStatusMessage(prev => ({ 
-          ...prev, 
-          [ord.id]: '✓ Confirmation sent' 
-        }));
-      }
-    } catch {
-      setEmailStatusMessage(prev => ({ 
-        ...prev, 
-        [ord.id]: `✓ Sent to ${targetEmail}` 
-      }));
-    } finally {
-      setSendingEmailOrderId(null);
-      setTimeout(() => {
-        setEmailStatusMessage(prev => {
-          const next = { ...prev };
-          delete next[ord.id];
-          return next;
-        });
-      }, 6000);
-    }
-  };
 
   const handleDownloadInvoice = (ord: Order) => {
     const invoiceHTML = `
       <!DOCTYPE html>
       <html>
         <head>
-          <title>AMRR Perfumes Tax Invoice - ${ord.id}</title>
+          <title>AMRR Perfumes Tax Invoice - ${formatOrderId(ord.id)}</title>
           <style>
             body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 40px; color: #111; max-width: 800px; margin: auto; }
             .header { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 20px; }
@@ -326,7 +179,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
             </div>
             <div style="text-align: right;">
               <div class="invoice-title">Tax Invoice</div>
-              <p><strong>Order ID:</strong> ${ord.id}<br/><strong>Date:</strong> ${ord.createdAt}<br/><strong>Payment ID:</strong> ${ord.paymentId}</p>
+              <p><strong>Order ID:</strong> ${formatOrderId(ord.id)}<br/><strong>Date:</strong> ${ord.createdAt}<br/><strong>Payment ID:</strong> ${ord.paymentId}</p>
             </div>
           </div>
           <div class="section">
@@ -606,13 +459,6 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
                 </h3>
               </div>
 
-              {loginNotice && (
-                <div className="bg-amber-50 border border-amber-200 text-amber-900 text-xs p-3 rounded-xl flex items-start gap-2 max-w-md mx-auto">
-                  <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-                  <p>{loginNotice}</p>
-                </div>
-              )}
-
               {loginStep === 'email' ? (
                 <form onSubmit={handleInitiateEmailLogin} className="max-w-md mx-auto space-y-3.5 sm:space-y-4 pt-1">
                   <div className="space-y-1">
@@ -878,12 +724,6 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
                   <Package className="w-4 h-4" /> Order History ({displayedOrders.length})
                 </button>
                 <button
-                  onClick={() => setActiveTab('track')}
-                  className={`pb-2 flex items-center gap-1.5 border-b-2 transition-colors cursor-pointer whitespace-nowrap ${activeTab === 'track' ? 'border-black text-black' : 'border-transparent text-gray-400'}`}
-                >
-                  <Truck className="w-4 h-4" /> Track Order & AWB
-                </button>
-                <button
                   onClick={() => setActiveTab('wishlist')}
                   className={`pb-2 flex items-center gap-1.5 border-b-2 transition-colors cursor-pointer whitespace-nowrap ${activeTab === 'wishlist' ? 'border-black text-black' : 'border-transparent text-gray-400'}`}
                 >
@@ -900,140 +740,6 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
               {/* Body Content */}
               <div className="py-4 flex-1 min-h-0 overflow-y-auto space-y-4 [scrollbar-width:thin] [scrollbar-color:#d1d5db_transparent]">
                 
-                {/* TRACK ORDER TAB */}
-                {activeTab === 'track' && (
-                  <div className="space-y-4">
-                    <div className="bg-gray-50 p-5 rounded-xl border border-gray-200 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-bold text-base text-black flex items-center gap-2">
-                          <Truck className="w-4 h-4 text-black" /> Delhivery Express Package Tracking
-                        </h4>
-                        <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200">
-                          Carrier: Delhivery One
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-600">
-                        Enter your Order ID or 12-digit Delhivery Waybill (AWB) number to view real-time delivery milestones.
-                      </p>
-
-                      <form onSubmit={handleTrackOrder} className="flex gap-2 pt-1">
-                        <input
-                          type="text"
-                          placeholder="Enter Order ID or Delhivery AWB number..."
-                          value={trackQuery}
-                          onChange={(e) => setTrackQuery(e.target.value)}
-                          className="flex-1 px-3 py-2 rounded-lg bg-white border border-gray-300 text-xs text-black focus:outline-none focus:border-black font-mono"
-                        />
-                        <button
-                          type="submit"
-                          disabled={isFetchingLiveTrack}
-                          className="px-4 py-2 bg-black text-white rounded-lg text-xs font-bold hover:bg-gray-800 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-                        >
-                          {isFetchingLiveTrack ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Truck className="w-3.5 h-3.5" />}
-                          Track
-                        </button>
-                      </form>
-
-                      {trackError && <p className="text-red-600 text-[11px]">{trackError}</p>}
-
-                      {orders.length > 0 && !searchedOrder && (
-                        <div className="pt-2">
-                          <p className="text-[11px] text-gray-500 mb-1.5">Track from your registered orders:</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {orders.slice(0, 6).map(o => (
-                              <button
-                                key={o.id}
-                                type="button"
-                                onClick={() => {
-                                  setTrackQuery(o.awbNumber || o.id);
-                                  setSearchedOrder(o);
-                                  setTrackError(null);
-                                  fetchLiveTracking(o.awbNumber || o.id, o);
-                                }}
-                                className="px-2.5 py-1 bg-white border border-gray-300 text-black rounded font-mono text-[10px] hover:bg-gray-100 cursor-pointer flex items-center gap-1"
-                              >
-                                <span>{o.id}</span>
-                                {o.awbNumber && (
-                                  <span className="text-emerald-700 font-bold bg-emerald-50 px-1 rounded">AWB</span>
-                                )}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {searchedOrder && (
-                      <div className="bg-white p-4 rounded-xl border border-gray-200 space-y-4 shadow-sm text-xs">
-                        <div className="flex flex-wrap justify-between items-center border-b border-gray-200 pb-3 gap-2">
-                          <div>
-                            <span className="font-mono font-bold text-black text-sm">{searchedOrder.id}</span>
-                            <span className="text-gray-500 ml-2">({searchedOrder.createdAt})</span>
-                          </div>
-                          
-                          <div className="flex items-center gap-2">
-                            {searchedOrder.awbNumber && (
-                              <div className="flex items-center gap-1 bg-gray-100 px-2 py-0.5 rounded border border-gray-300">
-                                <span className="text-[10px] text-gray-500 font-semibold">AWB:</span>
-                                <span className="font-mono font-bold text-black text-[10px]">{searchedOrder.awbNumber}</span>
-                                <button
-                                  onClick={() => copyToClipboard(searchedOrder.awbNumber!)}
-                                  className="p-0.5 text-gray-400 hover:text-black"
-                                  title="Copy AWB"
-                                >
-                                  {copiedAwb === searchedOrder.awbNumber ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                                </button>
-                              </div>
-                            )}
-                            <span className="bg-emerald-100 text-emerald-900 font-bold px-2 py-0.5 rounded text-[10px] flex items-center gap-1 border border-emerald-200">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                              {searchedOrder.delhiveryStatus || searchedOrder.status}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Dispatch notification card */}
-                        <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 flex flex-wrap items-center justify-between gap-2">
-                          <div className="space-y-0.5">
-                            <span className="text-[10px] text-gray-500 uppercase font-bold block">Delivery Recipient Email</span>
-                            <span className="font-semibold text-black">{searchedOrder.shippingDetails?.email || currentUser.email}</span>
-                          </div>
-                          <button
-                            onClick={() => handleSendConfirmationEmail(searchedOrder)}
-                            disabled={sendingEmailOrderId === searchedOrder.id}
-                            className="px-3 py-1.5 bg-black text-white text-[11px] font-bold rounded-lg hover:bg-gray-800 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                          >
-                            <Mail className="w-3.5 h-3.5" />
-                            {emailStatusMessage[searchedOrder.id] || 'Mail Order Confirmation'}
-                          </button>
-                        </div>
-
-                        {/* Scans Timeline */}
-                        {liveScanEvents.length > 0 ? (
-                          <div className="space-y-2 pt-2">
-                            <h5 className="font-bold text-black text-xs uppercase tracking-wider">Live Tracking Events</h5>
-                            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                              {liveScanEvents.map((scan, idx) => (
-                                <div key={idx} className="p-2.5 bg-gray-50 rounded-lg border border-gray-200 text-[11px] flex justify-between items-start">
-                                  <div>
-                                    <p className="font-bold text-black">{scan.scan || scan.scanType}</p>
-                                    <p className="text-gray-500">{scan.location}</p>
-                                  </div>
-                                  <span className="text-gray-400 font-mono text-[10px]">{scan.scanDateTime}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-center py-4 text-gray-500 text-xs">
-                            Delhivery tracking initialized. Package is in transit from warehouse origin amrparfumes.
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
                 {/* ORDERS TAB */}
                 {activeTab === 'orders' && (
                   <div className="space-y-4">
@@ -1047,136 +753,32 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
                       </div>
                     ) : (
                       displayedOrders.map((ord) => (
-                        <div key={ord.id} className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-3 text-xs shadow-sm">
-                          <div className="flex flex-wrap justify-between items-center border-b border-gray-200 pb-2.5 gap-2">
-                            <div>
-                              <span className="font-mono font-bold text-black text-sm">{ord.id}</span>
-                              <span className="text-gray-500 ml-2">({ord.createdAt})</span>
-                              <div className="text-[10px] text-gray-600 mt-0.5">
-                                Recipient Email: <strong>{ord.shippingDetails?.email || currentUser.email}</strong>
-                              </div>
-                            </div>
-                            
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              {/* Mail Confirmation Button */}
-                              <button
-                                onClick={() => handleSendConfirmationEmail(ord)}
-                                disabled={sendingEmailOrderId === ord.id}
-                                className="text-[11px] bg-white border border-gray-300 px-2.5 py-1 rounded-lg font-bold text-black hover:bg-gray-100 flex items-center gap-1 cursor-pointer disabled:opacity-50 transition-colors shadow-2xs"
-                                title="Mail Order Confirmation to this customer's email ID"
-                              >
-                                {sendingEmailOrderId === ord.id ? (
-                                  <Loader2 className="w-3 h-3 animate-spin text-black" />
-                                ) : (
-                                  <Mail className="w-3 h-3 text-black" />
-                                )}
-                                <span>{emailStatusMessage[ord.id] || 'Mail Confirmation'}</span>
-                              </button>
-
-                              <button
-                                onClick={() => openEmailReceiptInMailClient(ord)}
-                                className="text-[11px] bg-white border border-gray-300 px-2 py-1 rounded-lg font-medium text-gray-700 hover:text-black hover:bg-gray-100 flex items-center gap-1 cursor-pointer"
-                                title="Open order details in your default email client"
-                              >
-                                <ExternalLink className="w-3 h-3" />
-                                <span className="hidden sm:inline">Open Mail Client</span>
-                              </button>
-
-                              <button
-                                onClick={() => handleDownloadInvoice(ord)}
-                                className="text-[11px] bg-white border border-gray-300 px-2.5 py-1 rounded-lg font-semibold text-black hover:bg-gray-100 flex items-center gap-1 cursor-pointer"
-                              >
-                                <Download className="w-3 h-3" /> Invoice
-                              </button>
-                            </div>
+                        <div key={ord.id} className="bg-white p-4 rounded-xl border border-gray-200 space-y-3 text-xs shadow-xs">
+                          <div className="flex justify-between items-center text-[11px] text-gray-500 border-b border-gray-100 pb-2">
+                            <span className="font-mono font-semibold text-black">{formatOrderId(ord.id)}</span>
+                            <span>{ord.createdAt}</span>
                           </div>
 
-                          {/* Live Delhivery Tracker Banner */}
-                          <div className="bg-white p-3 rounded-lg border border-gray-200 space-y-2">
-                            <div className="flex items-center justify-between text-[11px] font-bold text-black">
-                              <span className="flex items-center gap-1">
-                                <Truck className="w-3.5 h-3.5" /> Delhivery Express Tracking
-                              </span>
-                              {ord.awbNumber ? (
-                                <div className="flex items-center gap-1">
-                                  <span className="text-gray-500 text-[10px]">AWB:</span>
-                                  <span className="font-mono text-[10px] font-bold text-emerald-900 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                                    {ord.awbNumber}
-                                  </span>
-                                  <button
-                                    onClick={() => copyToClipboard(ord.awbNumber!)}
-                                    className="text-gray-400 hover:text-black p-0.5"
-                                    title="Copy AWB"
-                                  >
-                                    {copiedAwb === ord.awbNumber ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                                  </button>
-                                </div>
-                              ) : (
-                                <span className="text-gray-500 font-mono text-[10px]">Pickup: amrparfumes</span>
-                              )}
-                            </div>
-
-                            <div className="grid grid-cols-4 gap-1 text-center pt-1">
-                              <div className="space-y-1">
-                                <div className="h-1.5 w-full bg-black rounded-full" />
-                                <span className="text-[9px] font-bold text-black block">Placed</span>
-                              </div>
-                              <div className="space-y-1">
-                                <div className="h-1.5 w-full bg-black rounded-full" />
-                                <span className="text-[9px] font-bold text-black block">Dispatched</span>
-                              </div>
-                              <div className="space-y-1">
-                                <div className="h-1.5 w-full bg-black rounded-full animate-pulse" />
-                                <span className="text-[9px] font-bold text-black block">In Transit</span>
-                              </div>
-                              <div className="space-y-1">
-                                <div className="h-1.5 w-full bg-gray-200 rounded-full" />
-                                <span className="text-[9px] text-gray-400 block">Delivered</span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-between pt-1">
-                              <p className="text-[10px] text-gray-600 flex items-center gap-1">
-                                <Clock className="w-3 h-3 text-black" /> Estimated Delivery: <strong>{ord.estimatedDelivery}</strong>
-                              </p>
-                              <button
-                                onClick={() => {
-                                  setActiveTab('track');
-                                  setTrackQuery(ord.awbNumber || ord.id);
-                                  setSearchedOrder(ord);
-                                  fetchLiveTracking(ord.awbNumber || ord.id, ord);
-                                }}
-                                className="text-[10px] text-black font-bold hover:underline cursor-pointer flex items-center gap-1"
-                              >
-                                Live Tracking Details →
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Item List */}
-                          <div className="space-y-1 pt-1">
+                          {/* Ordered Items */}
+                          <div className="space-y-2 py-1">
                             {ord.items.map((it, idx) => (
-                              <div key={idx} className="flex justify-between text-black">
-                                <span>{it.product.name} ({it.selectedSize}) × {it.quantity}</span>
-                                <span className="font-semibold">{formatPrice(it.unitPrice * it.quantity, currency)}</span>
+                              <div key={idx} className="flex justify-between items-center text-black">
+                                <span className="font-medium text-xs">
+                                  {it.product.name} ({it.selectedSize}) × {it.quantity}
+                                </span>
+                                <span className="font-semibold text-xs">
+                                  {formatPrice(it.unitPrice * it.quantity, currency)}
+                                </span>
                               </div>
                             ))}
                           </div>
 
-                          <div className="pt-2 border-t border-gray-200 flex justify-between items-center">
-                            <div>
-                              <span className="text-gray-500 text-[10px]">Total Paid: </span>
-                              <span className="font-bold text-sm text-black">
-                                {formatPrice(ord.totalAmount, currency)}
-                              </span>
-                            </div>
-
-                            <button
-                              onClick={() => onReorder(ord)}
-                              className="px-3 py-1.5 bg-black text-white rounded-lg font-semibold text-[11px] flex items-center gap-1 hover:bg-gray-800 transition-all cursor-pointer"
-                            >
-                              <RefreshCw className="w-3 h-3" /> Reorder
-                            </button>
+                          {/* Amount Paid */}
+                          <div className="pt-2.5 border-t border-gray-100 flex justify-between items-center">
+                            <span className="text-gray-600 font-medium text-xs">Amount Paid</span>
+                            <span className="font-bold text-sm text-black">
+                              {formatPrice(ord.totalAmount, currency)}
+                            </span>
                           </div>
                         </div>
                       ))

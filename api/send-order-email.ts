@@ -73,12 +73,6 @@ function generateOrderEmailHtml(order: any): string {
                       <td style="font-size: 12px; color: #666666; padding: 5px 0;">Payment Method:</td>
                       <td style="font-size: 13px; color: #000000; text-align: right;">${order.paymentMethod || 'Prepaid / Verified'}</td>
                     </tr>
-                    ${order.awbNumber ? `
-                    <tr>
-                      <td style="font-size: 12px; color: #1b6326; font-weight: bold; padding: 5px 0;">Delhivery Waybill (AWB):</td>
-                      <td style="font-size: 13px; color: #1b6326; font-weight: bold; text-align: right; font-family: monospace;">${order.awbNumber}</td>
-                    </tr>
-                    ` : ''}
                     <tr>
                       <td style="font-size: 12px; color: #666666; padding: 5px 0;">Estimated Delivery:</td>
                       <td style="font-size: 13px; color: #000000; font-weight: 600; text-align: right;">${order.estimatedDelivery || 'Within 48-72 Hours'}</td>
@@ -196,7 +190,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ success: false, error: 'Customer email address is required to mail order confirmation' });
     }
 
-    const emailSubject = `Order Confirmed: ${order.id} - AMRR Perfumes`;
+    const emailSubject = `Tax Invoice & Order Confirmation: #${order.id} - AMRR Perfumes`;
     const htmlContent = generateOrderEmailHtml(order);
 
     // Check if SMTP environment variables are configured

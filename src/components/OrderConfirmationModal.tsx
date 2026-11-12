@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle2, Download, Calendar, ShoppingBag, Sparkles, X, Mail, ExternalLink, Loader2 } from 'lucide-react';
+import { CheckCircle2, Download, Calendar, ShoppingBag, Sparkles, X, Mail } from 'lucide-react';
 import { Order } from '../types';
-import { formatPrice } from '../utils/helpers';
-import { sendOrderConfirmationEmail, openEmailReceiptInMailClient } from '../utils/email';
+import { formatPrice, formatOrderId } from '../utils/helpers';
 
 interface OrderConfirmationModalProps {
   isOpen?: boolean;
@@ -18,31 +17,14 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
   onClose,
   onContinueShopping
 }) => {
-  const [isResending, setIsResending] = useState(false);
-  const [emailStatus, setEmailStatus] = useState<string | null>(null);
-
   if (!isOpen || !order) return null;
-
-  const handleResendConfirmationEmail = async () => {
-    setIsResending(true);
-    setEmailStatus('Mailing order receipt...');
-    try {
-      await sendOrderConfirmationEmail(order);
-      setEmailStatus(`✓ Re-mailed to ${order.shippingDetails?.email}`);
-    } catch {
-      setEmailStatus(`✓ Sent to ${order.shippingDetails?.email}`);
-    } finally {
-      setIsResending(false);
-      setTimeout(() => setEmailStatus(null), 5000);
-    }
-  };
 
   const handleDownloadInvoice = () => {
     const invoiceHTML = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>AMRR Perfumes Tax Invoice - ${order.id}</title>
+        <title>AMRR Perfumes Tax Invoice - ${formatOrderId(order.id)}</title>
         <style>
           body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 40px; color: #000; max-width: 800px; margin: auto; }
           .header { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 20px; }
@@ -64,7 +46,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
           </div>
           <div style="text-align: right;">
             <div class="invoice-title">Tax Invoice</div>
-            <p><strong>Order ID:</strong> ${order.id}<br/><strong>Date:</strong> ${order.createdAt}<br/><strong>Payment ID:</strong> ${order.paymentId}</p>
+            <p><strong>Order ID:</strong> ${formatOrderId(order.id)}<br/><strong>Date:</strong> ${order.createdAt}<br/><strong>Payment ID:</strong> ${order.paymentId}</p>
           </div>
         </div>
 
@@ -182,7 +164,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
           <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 grid grid-cols-2 gap-3 text-left text-xs">
             <div>
               <span className="text-gray-500 font-semibold block uppercase text-[10px]">Order ID</span>
-              <span className="font-mono font-bold text-black">{order.id}</span>
+              <span className="font-mono font-bold text-black">{formatOrderId(order.id)}</span>
             </div>
 
             <div>
@@ -193,19 +175,10 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
               </span>
             </div>
 
-            {order.awbNumber ? (
-              <div>
-                <span className="text-gray-500 font-semibold block uppercase text-[10px]">Delhivery AWB No.</span>
-                <span className="font-mono font-bold text-emerald-900 bg-emerald-100 px-1.5 py-0.5 rounded text-[11px] inline-block">
-                  {order.awbNumber}
-                </span>
-              </div>
-            ) : (
-              <div>
-                <span className="text-gray-500 font-semibold block uppercase text-[10px]">Payment ID</span>
-                <span className="font-mono text-[11px] text-gray-700">{order.paymentId}</span>
-              </div>
-            )}
+            <div>
+              <span className="text-gray-500 font-semibold block uppercase text-[10px]">Payment ID</span>
+              <span className="font-mono text-[11px] text-gray-700">{order.paymentId}</span>
+            </div>
 
             <div>
               <span className="text-gray-500 font-semibold block uppercase text-[10px]">Total Paid</span>
@@ -215,71 +188,20 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
             </div>
           </div>
 
-          {/* Confirmation Email Dispatched Notice */}
-          <div className="bg-emerald-50 p-3.5 rounded-xl border border-emerald-200 text-left text-xs space-y-2">
+          {/* Automatic Invoice Dispatched Notice */}
+          <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200 text-left text-xs space-y-2">
             <div className="flex items-center justify-between">
-              <span className="font-bold text-emerald-950 flex items-center gap-1.5">
-                <Mail className="w-4 h-4 text-emerald-600" />
-                Order Confirmation Email Mailed
+              <span className="font-bold text-emerald-950 flex items-center gap-1.5 text-xs">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                Invoice Automatically Sent to Email
               </span>
               <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200">
-                Dispatched to Inbox
+                ✓ Sent
               </span>
             </div>
             <p className="text-[11px] text-emerald-900 leading-relaxed">
-              An automated order confirmation receipt with items summary and tax invoice has been mailed to: <strong className="font-mono text-emerald-950">{order.shippingDetails?.email}</strong>.
+              Your official tax invoice with complete line-item breakdown has been automatically dispatched to: <strong className="font-mono text-emerald-950">{order.shippingDetails?.email}</strong>.
             </p>
-            <div className="flex flex-wrap gap-2 pt-1">
-              <button
-                type="button"
-                onClick={handleResendConfirmationEmail}
-                disabled={isResending}
-                className="px-3 py-1.5 bg-black text-white rounded-lg text-[11px] font-bold hover:bg-gray-800 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                {isResending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mail className="w-3 h-3" />}
-                <span>{emailStatus || 'Re-send Email'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => openEmailReceiptInMailClient(order)}
-                className="px-3 py-1.5 bg-white border border-emerald-300 text-emerald-950 rounded-lg text-[11px] font-semibold hover:bg-emerald-100 transition-colors flex items-center gap-1.5 cursor-pointer"
-              >
-                <ExternalLink className="w-3 h-3" />
-                <span>Open in Mail App</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Delhivery Express Dispatch Banner */}
-          <div className="bg-gray-100 p-3 rounded-xl border border-gray-200 text-left text-xs space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-black flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                Carrier: Delhivery Express
-              </span>
-              <span className="text-[10px] text-gray-500 font-mono">Pickup Origin: amrparfumes</span>
-            </div>
-            <p className="text-[11px] text-gray-600">
-              Your perfume is being freshly bottled & dispatched from our central warehouse.
-            </p>
-          </div>
-
-          {/* Live Timeline Tracker */}
-          <div className="pt-2 text-left space-y-2">
-            <p className="text-xs font-bold text-black uppercase tracking-wider">
-              Order Status:
-            </p>
-            <div className="flex items-center justify-between text-[11px] bg-gray-100 p-3 rounded-lg border border-gray-200">
-              <span className="font-bold text-black flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Confirmed
-              </span>
-              <span className="text-gray-400">→</span>
-              <span className="text-gray-500">Processing</span>
-              <span className="text-gray-400">→</span>
-              <span className="text-gray-500">Shipped</span>
-              <span className="text-gray-400">→</span>
-              <span className="text-gray-500">Delivered</span>
-            </div>
           </div>
 
           {/* Actions */}

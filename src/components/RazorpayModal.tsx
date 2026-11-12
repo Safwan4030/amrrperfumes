@@ -199,13 +199,6 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
       setErrorMessage(null);
       setStep(1);
     } else {
-      if (!currentUser) {
-        setErrorMessage('Customer login is required before proceeding to payment. Please sign in to continue.');
-        if (onPromptLogin) {
-          onPromptLogin();
-        }
-        return;
-      }
       if (validateShippingDetails()) {
         setStep(targetStep);
       } else {
@@ -250,12 +243,6 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
   };
 
   const handleProcessRazorpayPayment = async () => {
-    if (!currentUser) {
-      setErrorMessage('Customer login is required before payment. Please sign in to continue.');
-      if (onPromptLogin) onPromptLogin();
-      return;
-    }
-
     if (!validateShippingDetails()) {
       setStep(1);
       return;
@@ -265,13 +252,15 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
     setErrorMessage(null);
 
     try {
+      const orderNumber = generateOrderId();
       const orderData = await createRazorpayOrder({
         amount: totalAmount,
         currency: 'INR',
-        receipt: generateOrderId(),
+        receipt: orderNumber,
         notes: {
           customer_email: shipping.email,
-          customer_name: shipping.fullName
+          customer_name: shipping.fullName,
+          order_id: orderNumber
         },
         items: cartItems.map(item => ({
           productId: item.product.id,
@@ -318,7 +307,7 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
             setIsProcessing(false);
 
             const newOrder: Order = {
-              id: response.razorpay_order_id || generateOrderId(),
+              id: orderNumber,
               createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
               items: cartItems,
               subtotal,
@@ -387,35 +376,6 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
       setIsProcessing(false);
       setErrorMessage(err?.message || 'Failed to initialize payment order.');
     }
-  };
-
-  const handleDirectDemoOrder = async (methodName = 'Prepaid (Direct Test Mode)') => {
-    if (!currentUser) {
-      setErrorMessage('Customer login is required before completing order. Please sign in to continue.');
-      if (onPromptLogin) onPromptLogin();
-      return;
-    }
-
-    setIsProcessing(true);
-    const newOrder: Order = {
-      id: generateOrderId(),
-      createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-      items: cartItems,
-      subtotal,
-      discount: discountAmount,
-      shippingFee,
-      totalAmount,
-      currency,
-      paymentMethod: methodName,
-      paymentId: `pay_${Math.random().toString(36).substring(2, 10)}`,
-      shippingDetails: shipping,
-      status: 'Processing',
-      estimatedDelivery: estimateDeliveryDate(),
-      delhiveryPickupLocation: 'amrparfumes'
-    };
-
-    await finalizeOrderWithDelhivery(newOrder, true);
-    setIsProcessing(false);
   };
 
   return (
@@ -502,31 +462,20 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
           {/* Modal Content Area */}
           <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
             
-            {/* Global Error Banner */}
+            {/* Global Error Notification */}
             {errorMessage && (
-              <div className="bg-red-50 border border-red-200 text-red-900 p-4 rounded-xl text-xs space-y-3 shadow-sm">
-                <div className="flex items-start gap-2.5">
-                  <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 shrink-0" />
-                  <div className="flex-1 font-medium leading-relaxed">{errorMessage}</div>
-                  <button 
-                    type="button"
-                    onClick={() => setErrorMessage(null)} 
-                    className="text-red-700 hover:text-red-900 font-bold ml-1 text-base leading-none cursor-pointer"
-                  >
-                    ×
-                  </button>
+              <div className="bg-red-50 border border-red-200 text-red-900 p-3 rounded-xl text-xs flex items-center justify-between shadow-sm">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                  <div className="font-medium leading-relaxed">{errorMessage}</div>
                 </div>
-
-                <div className="pt-2 border-t border-red-200 space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => handleDirectDemoOrder('Direct Test Mode Order')}
-                    className="w-full bg-black hover:bg-gray-800 text-white font-semibold py-2 px-3 rounded-lg text-xs transition-colors shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    Complete Order Directly (Test Mode)
-                  </button>
-                </div>
+                <button 
+                  type="button"
+                  onClick={() => setErrorMessage(null)} 
+                  className="text-red-500 hover:text-red-800 font-bold ml-2 text-base leading-none cursor-pointer p-1"
+                >
+                  ×
+                </button>
               </div>
             )}
 
@@ -542,8 +491,8 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
                   </span>
                 </div>
 
-                {/* Email Confirmation Notice & Login Prompt */}
-                {currentUser ? (
+                {/* Email Confirmation Notice when logged in */}
+                {currentUser && (
                   <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs text-emerald-950">
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -551,27 +500,6 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
                         Signed in: <strong>{currentUser.email}</strong>. Order confirmation will be mailed here.
                       </span>
                     </div>
-                  </div>
-                ) : (
-                  <div className="p-3 bg-neutral-900 border border-neutral-800 rounded-xl flex items-center justify-between text-xs text-white shadow-sm">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-full bg-amber-400/20 text-amber-300 flex items-center justify-center shrink-0">
-                        <Lock className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <p className="font-bold text-white text-xs">Customer Login Required</p>
-                        <p className="text-[11px] text-gray-300">You must log in or sign in with Google to proceed with your payment.</p>
-                      </div>
-                    </div>
-                    {onPromptLogin && (
-                      <button
-                        type="button"
-                        onClick={onPromptLogin}
-                        className="px-3.5 py-1.5 bg-white text-black font-bold text-xs uppercase tracking-wider rounded-lg hover:bg-gray-100 cursor-pointer shrink-0 ml-2"
-                      >
-                        Sign In
-                      </button>
-                    )}
                   </div>
                 )}
 
@@ -644,25 +572,12 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
                       className="w-full p-2.5 rounded-lg bg-white border border-gray-300 focus:border-black focus:outline-none"
                       required
                     />
-                    {pincodeStatus && (
-                      <div className={`mt-1.5 text-[10px] font-medium flex items-center gap-1 rounded px-2 py-1 ${
-                        pincodeStatus.serviceable 
-                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
-                          : 'bg-amber-50 text-amber-800 border border-amber-200'
-                      }`}>
-                        {pincodeStatus.serviceable ? (
-                          <>
-                            <Truck className="w-3 h-3 text-emerald-600 shrink-0" />
-                            <span>
-                              <strong>Delhivery Serviceable:</strong> Complimentary Express Delivery {pincodeStatus.city ? `to ${pincodeStatus.city}` : ''}
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <AlertCircle className="w-3 h-3 text-amber-600 shrink-0" />
-                            <span>{pincodeStatus.message || 'Pincode not currently serviceable.'}</span>
-                          </>
-                        )}
+                    {pincodeStatus && pincodeStatus.serviceable && (
+                      <div className="mt-1.5 text-[10px] font-medium flex items-center gap-1 rounded px-2 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        <Truck className="w-3 h-3 text-emerald-600 shrink-0" />
+                        <span>
+                          <strong>Express Delivery:</strong> Complimentary {pincodeStatus.city ? `to ${pincodeStatus.city}` : 'across India'}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -728,14 +643,7 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
                     type="submit"
                     className="px-6 py-2.5 bg-black text-white text-xs font-bold rounded-lg uppercase tracking-wider hover:bg-gray-800 transition-all cursor-pointer flex items-center gap-1.5"
                   >
-                    {!currentUser ? (
-                      <>
-                        <Lock className="w-3.5 h-3.5 text-amber-300" />
-                        <span>Sign In to Proceed →</span>
-                      </>
-                    ) : (
-                      <span>Review Order →</span>
-                    )}
+                    <span>Review Order →</span>
                   </button>
                 </div>
               </form>
@@ -936,15 +844,6 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
                     )}
                   </button>
 
-                  <div className="text-center pt-1">
-                    <button
-                      type="button"
-                      onClick={() => handleDirectDemoOrder('Direct Test Mode Order')}
-                      className="text-[11px] text-gray-500 hover:text-black underline font-medium cursor-pointer"
-                    >
-                      Testing in Preview? Click to Complete Order without Gateway Popup
-                    </button>
-                  </div>
                 </div>
 
               </div>

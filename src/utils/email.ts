@@ -1,4 +1,5 @@
 import { Order } from '../types';
+import { formatOrderId } from './helpers';
 
 export interface EmailDispatchResult {
   success: boolean;
@@ -42,7 +43,7 @@ export async function sendOrderConfirmationEmail(order: Order): Promise<EmailDis
       success: true,
       message: data.message || `Order confirmation email sent to ${recipient}`,
       recipient,
-      subject: data.subject || `Order Confirmed: ${order.id} - AMRR Perfumes`,
+      subject: data.subject || `Order Confirmed: #${formatOrderId(order.id)} - AMRR Perfumes`,
       htmlPreview: data.htmlPreview,
       details: data.details
     };
@@ -52,7 +53,7 @@ export async function sendOrderConfirmationEmail(order: Order): Promise<EmailDis
       success: true,
       message: `Confirmation email dispatched to ${recipient}`,
       recipient,
-      subject: `Order Confirmed: ${order.id} - AMRR Perfumes`
+      subject: `Order Confirmed: #${formatOrderId(order.id)} - AMRR Perfumes`
     };
   }
 }
@@ -117,13 +118,14 @@ export function openEmailReceiptInMailClient(order: Order) {
   const email = order.shippingDetails?.email;
   if (!email) return;
 
-  const subject = encodeURIComponent(`Order Confirmation & Receipt - ${order.id} | AMRR Perfumes`);
+  const formattedId = formatOrderId(order.id);
+  const subject = encodeURIComponent(`Order Confirmation & Receipt - #${formattedId} | AMRR Perfumes`);
   const bodyText = encodeURIComponent(`Dear ${order.shippingDetails.fullName},
 
 Thank you for choosing AMRR Perfumes! Your order has been confirmed.
 
 ORDER DETAILS:
-- Order ID: ${order.id}
+- Order ID: #${formattedId}
 - Order Date: ${order.createdAt}
 - Payment Status: Paid (${order.paymentMethod})
 - Total Amount: ₹${order.totalAmount.toLocaleString('en-IN')} INR

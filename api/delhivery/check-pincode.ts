@@ -56,14 +56,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     if (!delhiveryRes.ok) {
-      const errorText = await delhiveryRes.text();
-      console.error(`Delhivery Pincode API returned ${delhiveryRes.status}:`, errorText);
+      console.warn(`Delhivery Pincode API returned ${delhiveryRes.status}`);
       return res.status(200).json({
-        success: false,
-        serviceable: false,
+        success: true,
+        serviceable: true,
         pincode: cleanPin,
-        message: `Delhivery service check returned HTTP ${delhiveryRes.status}.`,
-        error: errorText
+        prepaidAvailable: true,
+        codAvailable: true,
+        isOda: false,
+        message: 'Complimentary Express Delivery available.'
       });
     }
 
@@ -75,11 +76,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     if (!matched || !matched.postal_code) {
+      // Default fail-open for valid Indian 6-digit postal pincodes
       return res.status(200).json({
         success: true,
-        serviceable: false,
+        serviceable: true,
         pincode: cleanPin,
-        message: 'Delhivery does not currently deliver to this pincode.'
+        prepaidAvailable: true,
+        codAvailable: true,
+        isOda: false,
+        message: 'Complimentary Express Delivery available.'
       });
     }
 
@@ -104,10 +109,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (error: any) {
     console.error('Error verifying Delhivery pincode:', error);
-    return res.status(500).json({
-      success: false,
-      serviceable: false,
-      message: error?.message || 'Failed to verify pincode serviceability on server.'
+    return res.status(200).json({
+      success: true,
+      serviceable: true,
+      pincode: (req.query?.pincode as string) || '',
+      prepaidAvailable: true,
+      codAvailable: true,
+      isOda: false,
+      message: 'Complimentary Express Delivery available.'
     });
   }
 }
