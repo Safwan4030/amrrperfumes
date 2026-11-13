@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  CreditCard, 
   Smartphone, 
-  Building2, 
   CheckCircle2, 
   X, 
   Zap, 
@@ -74,8 +72,7 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
     }
   }, [currentUser]);
 
-  const [paymentMethod, setPaymentMethod] = useState<'UPI' | 'CARD' | 'NETBANKING'>('UPI');
-  const [selectedUPIApp, setSelectedUPIApp] = useState<'gpay' | 'phonepe' | 'paytm' | 'bhim'>('gpay');
+  const [selectedUPIApp, setSelectedUPIApp] = useState<'gpay' | 'phonepe' | 'paytm'>('gpay');
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -332,11 +329,47 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
         prefill: {
           name: shipping.fullName,
           email: shipping.email,
-          contact: shipping.phone
+          contact: shipping.phone,
+          method: 'upi'
         },
         notes: {
           address: `${shipping.address}, ${shipping.city}, ${shipping.state} - ${shipping.pincode}`,
           order_items: cartItems.map(i => `${i.product.name} (${i.selectedSize} x${i.quantity})`).join(' | ')
+        },
+        method: {
+          upi: true,
+          card: false,
+          netbanking: false,
+          wallet: false,
+          emi: false,
+          paylater: false
+        },
+        config: {
+          display: {
+            blocks: {
+              upi: {
+                name: 'Pay via UPI',
+                instruments: [
+                  {
+                    method: 'upi',
+                    apps: ['google_pay', 'phonepe', 'paytm']
+                  }
+                ]
+              }
+            },
+            hide: [
+              { method: 'card' },
+              { method: 'netbanking' },
+              { method: 'emi' },
+              { method: 'wallet' },
+              { method: 'cardless_emi' },
+              { method: 'paylater' }
+            ],
+            sequence: ['block.upi'],
+            preferences: {
+              show_default_blocks: false
+            }
+          }
         },
         theme: {
           color: '#000000'
@@ -756,73 +789,31 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
                   </span>
                 </div>
 
-                {/* Payment Tabs */}
-                <div className="grid grid-cols-3 gap-2 text-xs font-semibold">
-                  <button
-                    onClick={() => setPaymentMethod('UPI')}
-                    className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
-                      paymentMethod === 'UPI' ? 'bg-black text-white border-black shadow' : 'bg-gray-50 text-gray-700 border-gray-200'
-                    }`}
-                  >
-                    <Smartphone className="w-5 h-5" />
-                    <span>UPI & QR</span>
-                  </button>
-
-                  <button
-                    onClick={() => setPaymentMethod('CARD')}
-                    className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
-                      paymentMethod === 'CARD' ? 'bg-black text-white border-black shadow' : 'bg-gray-50 text-gray-700 border-gray-200'
-                    }`}
-                  >
-                    <CreditCard className="w-5 h-5" />
-                    <span>Card</span>
-                  </button>
-
-                  <button
-                    onClick={() => setPaymentMethod('NETBANKING')}
-                    className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
-                      paymentMethod === 'NETBANKING' ? 'bg-black text-white border-black shadow' : 'bg-gray-50 text-gray-700 border-gray-200'
-                    }`}
-                  >
-                    <Building2 className="w-5 h-5" />
-                    <span>Net Banking</span>
-                  </button>
+                {/* UPI Payment Only (Google Pay, PhonePe, Paytm) */}
+                <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-3">
+                  <div className="flex items-center gap-2 text-xs font-bold text-black">
+                    <Smartphone className="w-4 h-4" />
+                    <span>Select UPI App</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'gpay', label: 'Google Pay' },
+                      { id: 'phonepe', label: 'PhonePe' },
+                      { id: 'paytm', label: 'Paytm' }
+                    ].map((app) => (
+                      <button
+                        key={app.id}
+                        type="button"
+                        onClick={() => setSelectedUPIApp(app.id as 'gpay' | 'phonepe' | 'paytm')}
+                        className={`p-3 rounded-lg border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                          selectedUPIApp === app.id ? 'bg-black text-white border-black shadow-sm' : 'bg-white text-gray-800 border-gray-300 hover:border-gray-400'
+                        }`}
+                      >
+                        {app.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-
-                {/* Method Specific UI */}
-                {paymentMethod === 'UPI' && (
-                  <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-3">
-                    <p className="text-xs font-bold text-black">UPI Payment Options:</p>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {[
-                        { id: 'gpay', label: 'Google Pay' },
-                        { id: 'phonepe', label: 'PhonePe' },
-                        { id: 'paytm', label: 'Paytm' },
-                        { id: 'bhim', label: 'BHIM UPI' }
-                      ].map((app) => (
-                        <button
-                          key={app.id}
-                          onClick={() => setSelectedUPIApp(app.id as any)}
-                          className={`p-2.5 rounded-lg border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                            selectedUPIApp === app.id ? 'bg-black text-white border-black' : 'bg-white text-gray-800 border-gray-300'
-                          }`}
-                        >
-                          {app.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {paymentMethod === 'CARD' && (
-                  <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-2 text-xs">
-                    <input type="text" placeholder="Card Number (4000 1234 5678 9010)" className="w-full p-2.5 rounded bg-white border border-gray-300 focus:outline-none focus:border-black" />
-                    <div className="grid grid-cols-2 gap-2">
-                      <input type="text" placeholder="MM / YY" className="p-2.5 rounded bg-white border border-gray-300 focus:outline-none focus:border-black" />
-                      <input type="password" placeholder="CVV" className="p-2.5 rounded bg-white border border-gray-300 focus:outline-none focus:border-black" />
-                    </div>
-                  </div>
-                )}
 
                 {/* Final Authorization Button */}
                 <div className="pt-2 space-y-2">
